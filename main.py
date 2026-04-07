@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import argparse
 import shutil
 import subprocess
 import zipfile
@@ -16,18 +17,37 @@ class AutoGrading:
     BASE_TREE = Path(__file__).resolve().parent
     BASE_PROJECT = BASE_TREE / "base-project"
     TESTING_DIR = BASE_TREE / "testing-project"
-    WORKING_DIR = BASE_TREE/ "working-project"
+    WORKING_DIR = BASE_TREE / "working-project"
     TMP_DIR = Path("/tmp/autograding")
     RESULTS_DIR = Path("/tmp/autograding_results")
 
-    COMPONENTS_TO_REPLACE = ["app", "routes", "resources"]
+    DEFAULT_COMPONENTS = ["app", "routes", "resources"]
 
-    def __init__(self, zip_file: str, student_name: str = "Anonymous"):
+    def __init__(
+        self,
+        zip_file: str,
+        student_name: str = "Anonymous",
+        *,
+        result_json_path: Optional[str] = None,
+        components_json_path: Optional[str] = None,
+    ):
         self.zip_file = Path(zip_file)
         self.student_name = student_name
         self.submission_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.working_project = None
         self.results = {}
+        self.result_json_path = Path(result_json_path) if result_json_path else None
+
+        if components_json_path:
+            with open(components_json_path, "r", encoding="utf-8") as cf:
+                loaded = json.load(cf)
+            if not isinstance(loaded, list) or not all(isinstance(x, str) for x in loaded):
+                raise ValueError("components JSON must be a list of strings")
+            self.components_to_replace = loaded
+        elif os.environ.get("AUTOGRADING_COMPONENTS"):
+            self.components_to_replace = json.loads(os.environ["AUTOGRADING_COMPONENTS"])
+        else:
+            self.components_to_replace = list(self.DEFAULT_COMPONENTS)
 
         self._ensure_paths_exist()
 
@@ -153,7 +173,7 @@ class AutoGrading:
             shutil.copytree(self.BASE_PROJECT, self.TESTING_DIR)
 
         try:
-            for component in self.COMPONENTS_TO_REPLACE:
+            for component in self.components_to_replace:
                 source = self._find_component_path(self.TMP_DIR / f"extract_{self.submission_id}", component)
                 destination = self.TESTING_DIR / component
 
@@ -346,23 +366,26 @@ class AutoGrading:
         self._log("=" * 60 + "\n")
 
     def _save_results(self, results: Dict):
-        result_file = (
-            self.RESULTS_DIR /
-            f"submission_{self.submission_id}.json"
-        )
+        if self.result_json_path:
+            result_file = self.result_json_path
+            result_file.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            result_file = self.RESULTS_DIR / f"submission_{self.submission_id}.json"
 
         result_data = {
             "student_name": self.student_name,
             "submission_id": self.submission_id,
             "timestamp": datetime.now().isoformat(),
             "results": results,
-            "working_project_path": str(self.working_project)
+            "working_project_path": str(self.working_project),
+            "components_replaced": self.components_to_replace,
         }
 
-        with open(result_file, 'w') as f:
+        with open(result_file, 'w', encoding='utf-8') as f:
             json.dump(result_data, f, indent=2)
 
         self._log(f"Results saved to: {result_file}")
+        print(f"AUTOGRADING_RESULT_JSON={result_file}", flush=True)
 
     def _cleanup(self, extract_path: Path):
         self._log("\n=== Cleanup ===")
@@ -450,18 +473,34 @@ def main():
         Clear()
         sys.exit(0)
 
-    if len(sys.argv) < 2:
-        print("AutoGrading - Python Script")
-        print("\nUsage:")
-        print("  python3 main.py <zip_path> [student_name]")
-        print("\nExample:")
-        print("  python3 main.py /tmp/submission.zip 'John Silva'")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="AutoGrading — integração com a plataforma de submissões")
+    parser.add_argument("zip_file", help="Caminho absoluto para o .zip da submissão")
+    parser.add_argument(
+        "student_name",
+        nargs="?",
+        default="Anonymous",
+        help="Nome do estudante (para logs)",
+    )
+    parser.add_argument(
+        "--result-json",
+        dest="result_json",
+        default=None,
+        help="Ficheiro onde gravar o JSON completo dos resultados",
+    )
+    parser.add_argument(
+        "--components-json",
+        dest="components_json",
+        default=None,
+        help='JSON array, ex.: ["app","routes","resources"] — pastas a substituir no projeto de teste',
+    )
+    args = parser.parse_args()
 
-    zip_file = sys.argv[1]
-    student_name = sys.argv[2] if len(sys.argv) > 2 else "Anonymous"
-
-    exe = AutoGrading(zip_file, student_name)
+    exe = AutoGrading(
+        args.zip_file,
+        args.student_name,
+        result_json_path=args.result_json,
+        components_json_path=args.components_json,
+    )
     success = exe.run()
 
     sys.exit(0 if success else 1)

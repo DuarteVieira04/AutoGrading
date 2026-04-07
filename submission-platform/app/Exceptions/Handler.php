@@ -3,6 +3,7 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -25,6 +26,22 @@ class Handler extends ExceptionHandler
     {
         $this->reportable(function (Throwable $e) {
             //
+        });
+
+        $this->renderable(function (PostTooLargeException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'The request body exceeds the server post_max_size limit.',
+                ], 413);
+            }
+
+            $message = __('The upload is larger than PHP allows (post_max_size / upload_max_filesize). Increase those in php.ini, or use composer run serve for local development.');
+
+            if ($request->routeIs('submissions.store')) {
+                return redirect()->route('submissions.index')->withErrors(['file' => $message]);
+            }
+
+            return redirect()->back()->withErrors(['file' => $message]);
         });
     }
 }

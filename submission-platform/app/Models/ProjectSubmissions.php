@@ -11,11 +11,13 @@ class ProjectSubmissions extends Model
 
     protected $fillable = [
         'student_id',
+        'grading_process_id',
         'file_path',
         'status',
         'submitted_at',
         'feedback',
         'grade',
+        'grading_log',
     ];
 
     protected $casts = [
@@ -26,5 +28,10 @@ class ProjectSubmissions extends Model
     public function student()
     {
         return $this->belongsTo(Student::class);
+    }
+
+    public function gradingProcess()
+    {
+        return $this->belongsTo(GradingProcess::class, 'grading_process_id');
     }
 }

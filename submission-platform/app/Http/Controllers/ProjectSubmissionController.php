@@ -2,28 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\GradeProjectSubmissionJob;
+use App\Models\GradingProcess;
 use App\Models\ProjectSubmissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class ProjectSubmissionController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+
     public function index()
     {
         return ProjectSubmissions::with('student.user')->get();
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
+
     public function store(Request $request)
     {
         $request->validate([
             'student_id' => 'required|exists:students,id',
-            'file' => 'required|file|mimes:zip|max:10240', // 10MB zip
+            'file' => 'required|file|mimes:zip|max:512000', // ≈500 MB; match PHP post_max_size / upload_max_filesize
         ]);
 
         $file = $request->file('file');
@@ -31,26 +29,21 @@ class ProjectSubmissionController extends Controller
 
         $submission = ProjectSubmissions::create([
             'student_id' => $request->student_id,
+            'grading_process_id' => GradingProcess::active()?->id,
             'file_path' => $path,
             'status' => 'pending',
         ]);
 
-        // Trigger grading job here, but for now, just create
+        GradeProjectSubmissionJob::dispatch($submission->id)->afterCommit();
 
         return response()->json($submission, 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(ProjectSubmissions $projectSubmission)
     {
         return $projectSubmission->load('student.user');
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, ProjectSubmissions $projectSubmission)
     {
         $request->validate([
@@ -63,9 +56,7 @@ class ProjectSubmissionController extends Controller
         return response()->json($projectSubmission);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
+
     public function destroy(ProjectSubmissions $projectSubmission)
     {
         Storage::disk('public')->delete($projectSubmission->file_path);
