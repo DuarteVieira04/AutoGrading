@@ -21,6 +21,10 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::apiResource('students', StudentController::class);
-Route::apiResource('teachers', TeacherController::class);
-Route::apiResource('project-submissions', ProjectSubmissionController::class);
+Route::delete('students/{student}', [StudentController::class, 'destroy'])->middleware('auth:sanctum', 'teacher');
+
+Route::middleware(['auth:sanctum', 'teacher'])->group(function () {
+    Route::apiResource('students', StudentController::class);
+    Route::apiResource('teachers', TeacherController::class);
+    Route::apiResource('project-submissions', ProjectSubmissionController::class);
+});
