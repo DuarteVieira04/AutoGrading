@@ -2,19 +2,8 @@
 
 use App\Http\Controllers\GradingProcessController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\SubmissionController;
+use App\Http\Controllers\ProjectSubmissionController;
 use Illuminate\Support\Facades\Route;
-
-/*
-|--------------------------------------------------------------------------
-| Web Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "web" middleware group. Make something great!
-|
-*/
 
 Route::get('/', function () {
     return view('welcome');
@@ -29,8 +18,8 @@ Route::middleware(['auth', 'teacher'])->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
-    Route::get('/submissions', [SubmissionController::class, 'index'])->name('submissions.index');
-    Route::post('/submissions', [SubmissionController::class, 'store'])->name('submissions.store');
+    Route::get('/submissions', [ProjectSubmissionController::class, 'index'])->name('submissions.index');
+    Route::post('/submissions', [ProjectSubmissionController::class, 'store'])->name('submissions.store');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

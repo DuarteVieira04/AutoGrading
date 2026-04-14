@@ -19,9 +19,9 @@ class GradingProcess extends Model
         'is_active' => 'boolean',
     ];
 
-    public function projectSubmissions(): HasMany
+    public function projectSubmission(): HasMany
     {
-        return $this->hasMany(ProjectSubmissions::class, 'grading_process_id');
+        return $this->hasMany(ProjectSubmission::class, 'grading_process_id');
     }
 
     public static function active(): ?self

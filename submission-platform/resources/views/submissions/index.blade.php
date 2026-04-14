@@ -18,44 +18,26 @@
             @endif
         </header>
 
-        @if (! $hasStudentProfile)
-            <div class="border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-800" role="status">
-                {{ __('This login is not linked to a student record. Ask your teacher or administrator to create a student profile for your account, or use an account that was set up as a student.') }}
-            </div>
-        @else
-            <section aria-labelledby="upload-heading" class="border border-gray-300 bg-gray-50 p-6">
-                <h2 id="upload-heading" class="text-base font-medium text-gray-900">{{ __('Upload') }}</h2>
-                <p class="mt-1 text-sm text-gray-600">{{ __('Use one option: upload one .zip, or pick a folder (Chrome, Edge, Safari). Do not use both.') }}</p>
+        @if ($hasStudentProfile)
+            <form method="post" action="{{ route('submissions.store') }}" enctype="multipart/form-data" class="mt-5 space-y-6">
+                @csrf
+                <input type="hidden" name="student_id" value="{{ auth()->user()->student->id }}">
 
-                <form method="post" action="{{ route('submissions.store') }}" enctype="multipart/form-data" class="mt-5 space-y-6">
-                    @csrf
-                    <div>
-                        <label for="file" class="block text-sm font-medium text-gray-800">{{ __('Option A — ZIP file') }}</label>
-                        <input id="file" name="file" type="file" accept=".zip,application/zip"
-                            class="mt-2 block w-full text-sm text-gray-800 file:mr-3 file:border file:border-gray-400 file:bg-white file:px-3 file:py-2 file:text-sm file:text-gray-900">
-                        @error('file')
-                            <p class="mt-2 text-sm text-gray-900">{{ $message }}</p>
-                        @enderror
-                    </div>
-                    <div>
-                        <label for="files" class="block text-sm font-medium text-gray-800">{{ __('Option B — Project folder') }}</label>
-                        <input id="files" name="files[]" type="file" multiple
-                            class="mt-2 block w-full text-sm text-gray-800 file:mr-3 file:border file:border-gray-400 file:bg-white file:px-3 file:py-2 file:text-sm file:text-gray-900"
-                            webkitdirectory directory>
-                        @error('files')
-                            <p class="mt-2 text-sm text-gray-900">{{ $message }}</p>
-                        @enderror
-                        <p class="mt-1 text-xs text-gray-500">{{ __('The server packs the folder into one .zip and shows that name in the table. PHP may limit how many files are accepted per request (see max_file_uploads in php.ini).') }}</p>
-                    </div>
-                    <div>
-                        <button type="submit" class="border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100">
-                            {{ __('Submit project') }}
-                        </button>
-                    </div>
-                </form>
-            </section>
+                <div>
+                    <label for="file" class="block text-sm font-medium text-gray-800">{{ __('Upload ZIP file') }}</label>
+                    <input id="file" name="file" type="file" accept=".zip,application/zip"
+                        class="mt-2 block w-full text-sm text-gray-800 file:mr-3 file:border file:border-gray-400 file:bg-white file:px-3 file:py-2 file:text-sm file:text-gray-900">
+                    @error('file')
+                        <p class="mt-2 text-sm text-gray-900">{{ $message }}</p>
+                    @enderror
+                </div>
+                <div>
+                    <button type="submit" class="border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100">
+                        {{ __('Submit project') }}
+                    </button>
+                </div>
+            </form>
         @endif
-
         <section aria-labelledby="history-heading">
             <h2 id="history-heading" class="text-base font-medium text-gray-900">{{ __('Your uploads') }}</h2>
 

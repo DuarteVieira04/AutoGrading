@@ -22,6 +22,6 @@ class Student extends Model
 
     public function codeDeliveries()
     {
-        return $this->hasMany(ProjectSubmissions::class);
+        return $this->hasMany(ProjectSubmission::class);
     }
 }

@@ -49,6 +49,28 @@ class GradingProcessController extends Controller
             ->with('status', __('Processo atualizado.'));
     }
 
+    public function grade(GradingProcess $gradingProcess): RedirectResponse
+    {
+        $gradingProcess->gradePendingSubmissions();
+
+        $result = Process::run([
+            'python3', 
+            base_path('scripts/grader.py'), 
+            $fullPath,
+            $request->assignment_id
+        ]);
+
+        if ($result->successful()) {
+            $output = json_decode($result->output(), true);
+            return response()->json(['message' => 'Graded!', 'data' => $output]);
+        }
+
+        return response()->json(['error' => 'Grading failed', 'details' => $result->errorOutput()], 500);
+
+        return redirect()
+            ->route('grading-processes.index')
+            ->with('status', __('Correção iniciada para o processo ":name".', ['name' => $gradingProcess->name]));
+    }
     public function destroy(GradingProcess $gradingProcess): RedirectResponse
     {
         $gradingProcess->delete();
@@ -63,9 +85,6 @@ class GradingProcessController extends Controller
             ->with('status', __('Processo removido.'));
     }
 
-    /**
-     * @return array{name: string, description: string|null, components: array, is_active: bool}
-     */
     private function validated(Request $request): array
     {
         $validated = $request->validate([

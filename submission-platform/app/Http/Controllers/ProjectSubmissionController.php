@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\GradeProjectSubmissionJob;
 use App\Models\GradingProcess;
-use App\Models\ProjectSubmissions;
+use App\Models\ProjectSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -13,7 +13,12 @@ class ProjectSubmissionController extends Controller
 
     public function index()
     {
-        return ProjectSubmissions::with('student.user')->get();
+        $submissions = ProjectSubmission::with('student.user')->get();
+
+        return view('submissions.index', [
+            'submissions' => $submissions,
+            'hasStudentProfile' => auth()->user()->student ?? false,
+        ]);
     }
 
 
@@ -21,30 +26,34 @@ class ProjectSubmissionController extends Controller
     {
         $request->validate([
             'student_id' => 'required|exists:students,id',
-            'file' => 'required|file|mimes:zip|max:512000', // ≈500 MB; match PHP post_max_size / upload_max_filesize
+            'file' => 'required|file|mimes:zip|max:512000', // ~500MB
         ]);
 
         $file = $request->file('file');
         $path = $file->store('submissions', 'public');
 
-        $submission = ProjectSubmissions::create([
-            'student_id' => $request->student_id,
-            'grading_process_id' => GradingProcess::active()?->id,
-            'file_path' => $path,
-            'status' => 'pending',
-        ]);
+        try {
+            $submission = ProjectSubmission::create([
+                'student_id' => $request->student_id,
+                'grading_process_id' => GradingProcess::active()?->id,
+                'file_path' => $path,
+                'status' => 'pending',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
 
-        GradeProjectSubmissionJob::dispatch($submission->id)->afterCommit();
-
-        return response()->json($submission, 201);
+        return redirect()
+        ->route('submissions.index')
+        ->with('success', 'Project submitted successfully!');
     }
 
-    public function show(ProjectSubmissions $projectSubmission)
+    public function show(ProjectSubmission $projectSubmission)
     {
         return $projectSubmission->load('student.user');
     }
 
-    public function update(Request $request, ProjectSubmissions $projectSubmission)
+    public function update(Request $request, ProjectSubmission $projectSubmission)
     {
         $request->validate([
             'status' => 'in:pending,processing,graded,failed',
@@ -57,7 +66,7 @@ class ProjectSubmissionController extends Controller
     }
 
 
-    public function destroy(ProjectSubmissions $projectSubmission)
+    public function destroy(ProjectSubmission $projectSubmission)
     {
         Storage::disk('public')->delete($projectSubmission->file_path);
         $projectSubmission->delete();

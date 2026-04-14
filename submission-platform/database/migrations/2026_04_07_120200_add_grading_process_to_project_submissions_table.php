@@ -20,7 +20,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('project_submissions', function (Blueprint $table) {
+        Schema::table('project_submission', function (Blueprint $table) {
             $table->dropForeign(['grading_process_id']);
             $table->dropColumn(['grading_process_id', 'grading_log']);
         });

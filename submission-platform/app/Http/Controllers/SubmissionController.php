@@ -39,41 +39,14 @@ class SubmissionController extends Controller
         }
 
         $request->validate([
-            'file' => ['nullable', 'file', 'mimes:zip', 'max:512000'],
-            'files' => ['nullable', 'array'],
-            'files.*' => ['file'],
+            'zip_file' => 'required|file|mimes:zip|max:512000',
         ]);
-
-        $hasZip = $request->hasFile('file');
-        $folderFiles = $request->file('files', []);
-        $folderFiles = is_array($folderFiles) ? array_values(array_filter($folderFiles)) : [];
-        $hasFolder = count($folderFiles) > 0;
-
-        if (! $hasZip && ! $hasFolder) {
+  
+        $totalBytes = collect($request->file('zip_file'))->getSize();
+        if ($totalBytes > $maxBytes) {
             return back()->withErrors([
-                'file' => __('Upload a .zip file or choose a project folder.'),
+                'file' => __('Total folder size exceeds the maximum allowed (about 500 MB).'),
             ])->withInput();
-        }
-
-        if ($hasZip && $hasFolder) {
-            return back()->withErrors([
-                'file' => __('Use either a ZIP file or a folder, not both.'),
-            ])->withInput();
-        }
-
-        $maxBytes = 512000 * 1024;
-
-        if ($hasZip) {
-            $path = $request->file('file')->store('submissions', 'public');
-        } else {
-            $totalBytes = collect($folderFiles)->sum(fn (UploadedFile $f) => $f->getSize());
-            if ($totalBytes > $maxBytes) {
-                return back()->withErrors([
-                    'file' => __('Total folder size exceeds the maximum allowed (about 500 MB).'),
-                ])->withInput();
-            }
-
-            $path = $this->storeFolderAsZip($folderFiles, $student->id);
         }
 
         $submission = ProjectSubmissions::create([
@@ -85,14 +58,17 @@ class SubmissionController extends Controller
 
         GradeProjectSubmissionJob::dispatch($submission->id)->afterCommit();
 
+        $studentId = auth()->id();
+
+        $folder = "zips/{$studentId}";
+
+        $path = $file->store($folder);
+
         return redirect()
             ->route('submissions.index')
             ->with('status', __('Upload received. Automatic grading has been queued — refresh in a few moments for feedback.'));
     }
 
-    /**
-     * Pack uploaded directory files into a zip on the public disk.
-     */
     private function storeFolderAsZip(array $uploadedFiles, int $studentId): string
     {
         $zipName = sprintf('submission-%d-%s.zip', $studentId, now()->format('YmdHis'));
