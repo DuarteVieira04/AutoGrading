@@ -12,21 +12,23 @@ class ProjectSubmissionController extends Controller
 {
 
     public function index()
-    {
-        $submissions = ProjectSubmission::with('student.user')->get();
+{
+    $submissions = ProjectSubmission::with(['student.user', 'gradingProcess'])->get();
 
-        return view('submissions.index', [
-            'submissions' => $submissions,
-            'hasStudentProfile' => auth()->user()->student ?? false,
-        ]);
-    }
+    return view('submissions.index', [
+        'submissions' => $submissions,
+        'hasStudentProfile' => auth()->user()->student ?? false,
+        'gradingProcesses' => \App\Models\GradingProcess::all(), 
+    ]);
+}
 
 
     public function store(Request $request)
     {
         $request->validate([
             'student_id' => 'required|exists:students,id',
-            'file' => 'required|file|mimes:zip|max:512000', // ~500MB
+            'grading_process_id' => 'required|exists:grading_processes,id',
+            'file' => 'required|file|mimes:zip|max:512000',
         ]);
 
         $file = $request->file('file');
@@ -66,10 +68,12 @@ class ProjectSubmissionController extends Controller
     }
 
 
-    public function destroy(ProjectSubmission $projectSubmission)
+    public function destroy(GradingProcess $gradingProcess): RedirectResponse
     {
-        Storage::disk('public')->delete($projectSubmission->file_path);
-        $projectSubmission->delete();
-        return response()->json(null, 204);
+        $gradingProcess->delete();
+
+        return redirect()
+            ->route('grading-processes.index')
+            ->with('status', __('Processo removido.'));
     }
 }

@@ -5,7 +5,7 @@
                 {{ __('Processos de correção automática') }}
             </h2>
             <a href="{{ route('grading-processes.create') }}"
-                class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+               class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
                 {{ __('Novo processo') }}
             </a>
         </div>
@@ -13,8 +13,11 @@
 
     <div class="py-8">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-4">
+
             @if (session('status'))
-                <div class="rounded-md bg-green-50 p-4 text-sm text-green-800 border border-green-200">{{ session('status') }}</div>
+                <div class="rounded-md bg-green-50 p-4 text-sm text-green-800 border border-green-200">
+                    {{ session('status') }}
+                </div>
             @endif
 
             <p class="text-sm text-gray-600">
@@ -23,46 +26,126 @@
 
             <div class="overflow-x-auto bg-white shadow-sm sm:rounded-lg border border-gray-200">
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
+
+                    {{-- HEADER --}}
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-4 py-3 text-left font-medium text-gray-700">{{ __('Nome') }}</th>
-                            <th class="px-4 py-3 text-left font-medium text-gray-700">{{ __('Componentes') }}</th>
-                            <th class="px-4 py-3 text-left font-medium text-gray-700">{{ __('Ativo') }}</th>
-                            <th class="px-4 py-3 text-right font-medium text-gray-700">{{ __('Ações') }}</th>
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">
+                                {{ __('Nome') }}
+                            </th>
+
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">
+                                {{ __('Período do Processo') }}
+                            </th>
+
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">
+                                {{ __('Período de Submissão') }}
+                            </th>
+
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">
+                                {{ __('Componentes') }}
+                            </th>
+
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">
+                                {{ __('Ativo') }}
+                            </th>
+
+                            <th class="px-4 py-3 text-right font-medium text-gray-700">
+                                {{ __('Ações') }}
+                            </th>
                         </tr>
                     </thead>
+
+                    {{-- BODY --}}
                     <tbody class="divide-y divide-gray-200">
                         @forelse ($processes as $p)
                             <tr>
-                                <td class="px-4 py-3 text-gray-900">
-                                    <div class="font-medium">{{ $p->name }}</div>
-                                    @if ($p->description)
-                                        <div class="text-gray-500 text-xs mt-1">{{ \Illuminate\Support\Str::limit($p->description, 120) }}</div>
+
+                                {{-- NAME (no description anymore) --}}
+                                <td class="px-4 py-3 text-gray-900 font-medium">
+                                    {{ $p->name }}
+                                </td>
+
+                                {{-- PROCESS DATES --}}
+                                <td class="px-4 py-3 text-xs text-gray-700 space-y-1">
+                                    @if ($p->start_date)
+                                        <div>
+                                            <span class="font-medium">Início:</span>
+                                            {{ $p->start_date->format('d/m/y H:i') }}
+                                        </div>
+                                    @endif
+
+                                    @if ($p->end_date)
+                                        <div>
+                                            <span class="font-medium">Fim:</span>
+                                            {{ $p->end_date->format('d/m/y H:i') }}
+                                        </div>
                                     @endif
                                 </td>
-                                <td class="px-4 py-3 text-gray-700 font-mono text-xs">{{ json_encode($p->components) }}</td>
+
+                                {{-- SUBMISSION DATES --}}
+                                <td class="px-4 py-3 text-xs text-gray-700 space-y-1">
+                                    @if ($p->submission_start_date)
+                                        <div>
+                                            <span class="font-medium">Início:</span>
+                                            {{ $p->submission_start_date->format('d/m/y H:i') }}
+                                        </div>
+                                    @endif
+
+                                    @if ($p->submission_end_date)
+                                        <div>
+                                            <span class="font-medium">Fim:</span>
+                                            {{ $p->submission_end_date->format('d/m/y H:i') }}
+                                        </div>
+                                    @endif
+                                </td>
+
+                                {{-- COMPONENTS --}}
+                                <td class="px-4 py-3 text-gray-700 font-mono text-xs">
+                                    {{ json_encode($p->components ?? []) }}
+                                </td>
+
+                                {{-- ACTIVE --}}
                                 <td class="px-4 py-3">
                                     @if ($p->is_active)
-                                        <span class="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">{{ __('Sim') }}</span>
+                                        <span class="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                            {{ __('Sim') }}
+                                        </span>
                                     @else
                                         <span class="text-gray-400">{{ __('Não') }}</span>
                                     @endif
                                 </td>
+
+                                {{-- ACTIONS --}}
                                 <td class="px-4 py-3 text-right space-x-2">
-                                    <a href="{{ route('grading-processes.edit', $p) }}" class="text-indigo-600 hover:text-indigo-800">{{ __('Editar') }}</a>
-                                    <form action="{{ route('grading-processes.destroy', $p) }}" method="post" class="inline" onsubmit="return confirm('{{ __('Remover este processo?') }}');">
+                                    <a href="{{ route('grading-processes.edit', $p->id) }}"
+                                       class="text-indigo-600 hover:text-indigo-800">
+                                        {{ __('Editar') }}
+                                    </a>
+
+                                    <form action="{{ route('grading-processes.destroy', $p) }}"
+                                          method="post"
+                                          class="inline"
+                                          onsubmit="return confirm('{{ __('Remover este processo?') }}');">
                                         @csrf
                                         @method('DELETE')
-                                        <button type="submit" class="text-red-600 hover:text-red-800">{{ __('Apagar') }}</button>
+
+                                        <button type="submit" class="text-red-600 hover:text-red-800">
+                                            {{ __('Apagar') }}
+                                        </button>
                                     </form>
                                 </td>
+
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="px-4 py-8 text-center text-gray-500">{{ __('Nenhum processo. Crie um ou execute: php artisan db:seed --class=GradingProcessSeeder') }}</td>
+                                <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                                    {{ __('Nenhum processo. Crie um novo processo para começar.') }}
+                                </td>
                             </tr>
                         @endforelse
                     </tbody>
+
                 </table>
             </div>
         </div>

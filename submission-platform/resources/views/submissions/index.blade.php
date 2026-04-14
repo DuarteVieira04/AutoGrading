@@ -31,6 +31,23 @@
                         <p class="mt-2 text-sm text-gray-900">{{ $message }}</p>
                     @enderror
                 </div>
+                
+                <div>
+                <label for="grading_process" class="block text-sm font-medium text-gray-800">{{ __('Grading Process') }}</label>
+                <select id="grading_process" name="grading_process_id"
+                        class="mt-2 block w-full text-sm text-gray-800 border-gray-300 rounded-md">
+                    <option value="">{{ __('Select a grading process') }}</option>
+                    @foreach ($gradingProcesses as $process)
+                        @if ($process->is_active)
+                            <option value="{{ $process->id }}">{{ $process->name }}</option>
+                        @endif
+                    @endforeach
+                </select>
+                @error('grading_process_id')
+                    <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+                </div>
+
                 <div>
                     <button type="submit" class="border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100">
                         {{ __('Submit project') }}
@@ -50,6 +67,7 @@
                             <tr>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Date') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Stored file') }}</th>
+                                <th scope="col" class="px-4 py-2 font-medium">{{ __('Grading process') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Status') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Grade') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Feedback') }}</th>
@@ -60,6 +78,7 @@
                                 <tr>
                                     <td class="whitespace-nowrap px-4 py-2 text-gray-800">{{ $row->created_at->format('Y-m-d H:i') }}</td>
                                     <td class="px-4 py-2 text-gray-800">{{ basename($row->file_path) }}</td>
+                                    <td class="px-4 py-2 text-gray-800"> {{ $row->gradingProcess->name ?? '—' }} </td>
                                     <td class="px-4 py-2 text-gray-800">{{ ucfirst($row->status) }}</td>
                                     <td class="px-4 py-2 text-gray-800">
                                         @if ($row->grade !== null)

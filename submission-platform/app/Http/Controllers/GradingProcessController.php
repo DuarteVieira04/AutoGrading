@@ -3,17 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\GradingProcess;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Process;
 
 class GradingProcessController extends Controller
 {
     public function index(): View
     {
         $processes = GradingProcess::query()
-            ->orderByDesc('is_active')
-            ->orderBy('name')
+            ->whereNotNull('id')
             ->get();
 
         return view('grading-processes.index', compact('processes'));
@@ -48,29 +49,7 @@ class GradingProcessController extends Controller
             ->route('grading-processes.index')
             ->with('status', __('Processo atualizado.'));
     }
-
-    public function grade(GradingProcess $gradingProcess): RedirectResponse
-    {
-        $gradingProcess->gradePendingSubmissions();
-
-        $result = Process::run([
-            'python3', 
-            base_path('scripts/grader.py'), 
-            $fullPath,
-            $request->assignment_id
-        ]);
-
-        if ($result->successful()) {
-            $output = json_decode($result->output(), true);
-            return response()->json(['message' => 'Graded!', 'data' => $output]);
-        }
-
-        return response()->json(['error' => 'Grading failed', 'details' => $result->errorOutput()], 500);
-
-        return redirect()
-            ->route('grading-processes.index')
-            ->with('status', __('Correção iniciada para o processo ":name".', ['name' => $gradingProcess->name]));
-    }
+    
     public function destroy(GradingProcess $gradingProcess): RedirectResponse
     {
         $gradingProcess->delete();
@@ -87,10 +66,27 @@ class GradingProcessController extends Controller
 
     private function validated(Request $request): array
     {
+        $dateFields = [
+            'start_date',
+            'submission_start_date',
+            'submission_end_date',
+            'end_date',
+        ];
+
+        foreach ($dateFields as $field) {
+            $request->merge([
+                $field => $this->normalizeDateTimeInput($request->input($field)),
+            ]);
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'components_json' => ['required', 'string'],
+            'start_date' => ['required', 'date'],
+            'submission_start_date' => ['required', 'date'],
+            'submission_end_date' => ['required', 'date'],
+            'end_date' => ['required','date'],
         ]);
 
         $decoded = json_decode($validated['components_json'], true);
@@ -113,6 +109,29 @@ class GradingProcessController extends Controller
             'description' => $validated['description'] ?? null,
             'components' => array_values($decoded),
             'is_active' => $request->boolean('is_active'),
+            'start_date' => $validated['start_date'],
+            'submission_start_date' => $validated['submission_start_date'],
+            'submission_end_date' => $validated['submission_end_date'],
+            'end_date' => $validated['end_date'],
         ];
+    }
+
+    private function normalizeDateTimeInput(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        try {
+            return Carbon::createFromFormat('d/m/y H:i', $value)->format('Y-m-d H:i:s');
+        } catch (\Throwable) {
+            return $value;
+        }
     }
 }

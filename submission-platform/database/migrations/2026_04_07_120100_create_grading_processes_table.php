@@ -12,10 +12,12 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->text('description')->nullable();
-            /** Pastas alvo do script Python: app, routes, resources, … */
             $table->json('components');
-            /** Apenas um processo “ativo” é usado em novas submissões (o mais recente com is_active=true) */
             $table->boolean('is_active')->default(true);
+            $table->timestamp('start_date');
+            $table->timestamp('submission_start_date');
+            $table->timestamp('submission_end_date');
+            $table->timestamp('end_date');
             $table->timestamps();
         });
     }
