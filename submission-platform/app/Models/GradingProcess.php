@@ -12,12 +12,22 @@ class GradingProcess extends Model
         'description',
         'components',
         'is_active',
+        'start_date',
+        'submission_start_date',
+        'submission_end_date',
+        'end_date',
     ];
 
     protected $casts = [
         'components' => 'array',
         'is_active' => 'boolean',
+        'start_date' => 'datetime',
+        'submission_start_date' => 'datetime',
+        'submission_end_date' => 'datetime',
+        'end_date' => 'datetime',
     ];
+
+
 
     public function projectSubmission(): HasMany
     {
@@ -32,14 +42,4 @@ class GradingProcess extends Model
             ->first();
     }
 
-    protected static function booted(): void
-    {
-        static::saved(function (GradingProcess $process) {
-            if ($process->is_active) {
-                static::query()
-                    ->where('id', '!=', $process->id)
-                    ->update(['is_active' => false]);
-            }
-        });
-    }
 }

@@ -7,6 +7,7 @@ use App\Models\GradingProcess;
 use App\Models\ProjectSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Process;
 
 class ProjectSubmissionController extends Controller
 {
@@ -43,6 +44,29 @@ class ProjectSubmissionController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
+        }
+
+        if ($request->hasFile('file')) {
+            $path = $request->file('file')->store('submissions');
+            $absolutePath = storage_path('app/' . $path);
+        }
+
+        $result = Process::run([
+            'python3', 
+            '/home/duartetochas/Desktop/projetInf/main.py', 
+            $absolutePath
+        ]);
+    
+        if ($result->successful()) {
+            $submission->update([
+                'status' => 'graded',
+                'feedback' => ['output' => $result->output()]
+            ]);
+        } else {
+            $submission->update([
+                'status' => 'failed',
+                'feedback' => ['error' => $result->errorOutput()]
+            ]);
         }
 
         return redirect()
