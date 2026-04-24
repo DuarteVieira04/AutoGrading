@@ -5,9 +5,9 @@
 @section('content')
     <div class="space-y-10">
         <header class="border-b border-gray-300 pb-6">
-            <h1 class="text-xl font-semibold text-gray-900">{{ __('Project submissions') }}</h1>
+            <h1 class="text-xl font-semibold text-gray-900">{{ __('Submissões de Projetos') }}</h1>
             <p class="mt-2 max-w-2xl text-sm text-gray-600">
-                {{ __('Send a single .zip file, or select your whole project folder (browser will upload all files). Total size limit about 500 MB. PHP post_max_size / upload_max_size must allow your upload.') }}
+                {{ __('Send a single .zip file, or select your whole project folder (browser will upload all files). Total size limit about 500 MB.') }}
             </p>
             @if (config('queue.default') === 'database')
                 <p class="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded">
@@ -65,6 +65,7 @@
                     <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
                         <thead class="bg-gray-100 text-gray-800">
                             <tr>
+                                <th scope="col" class="px-4 py-2 font-medium">{{ __('Grupo') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Date') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Stored file') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Grading process') }}</th>
@@ -76,6 +77,17 @@
                         <tbody class="divide-y divide-gray-200 bg-white">
                             @foreach ($submissions as $row)
                                 <tr>
+                                    <td class="px-4 py-2 text-gray-800">
+                                        @if ($groups->isNotEmpty())
+                                            @foreach ($groups as $group)
+                                                <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                                                    {{ $group->name }}
+                                                </span>
+                                            @endforeach
+                                        @else
+                                            <span class="text-gray-400 text-sm italic">{{ __('Não tem grupo') }}</span>
+                                        @endif
+                                    </td>
                                     <td class="whitespace-nowrap px-4 py-2 text-gray-800">{{ $row->created_at->format('Y-m-d H:i') }}</td>
                                     <td class="px-4 py-2 text-gray-800">{{ basename($row->file_path) }}</td>
                                     <td class="px-4 py-2 text-gray-800"> {{ $row->gradingProcess->name ?? '—' }} </td>

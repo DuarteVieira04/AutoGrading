@@ -13,19 +13,38 @@ class ProjectSubmissionController extends Controller
 {
 
     public function index()
-{
-    $submissions = ProjectSubmission::with(['student.user', 'gradingProcess'])->get();
+    {
+        $submissions = ProjectSubmission::with(['student.user', 'gradingProcess'])
+            ->latest()
+            ->get();
 
-    return view('submissions.index', [
-        'submissions' => $submissions,
-        'hasStudentProfile' => auth()->user()->student ?? false,
-        'gradingProcesses' => \App\Models\GradingProcess::all(), 
-    ]);
-}
+        return view('submissions.index', [
+            'submissions' => $submissions,
+            'hasStudentProfile' => auth()->user()->student ?? false,
+            'gradingProcesses' => \App\Models\GradingProcess::all(),
+        ]);
+    }
 
 
     public function store(Request $request)
     {
+
+        $student = auth()->user()->student;
+
+        $process = Process::findOrFail($request->grading_process_id);
+
+        $allowed = $process->groups()
+        ->whereHas('users', function ($q) use ($student) {
+            $q->where('users.id', $student->user_id);
+        })
+        ->exists();
+
+        if (!$allowed) {
+            return back()->withErrors([
+                'grading_process_id' => 'You are not allowed to submit to this process.'
+            ]);
+        }
+        
         $request->validate([
             'student_id' => 'required|exists:students,id',
             'grading_process_id' => 'required|exists:grading_processes,id',
@@ -53,7 +72,7 @@ class ProjectSubmissionController extends Controller
 
         $result = Process::run([
             'python3', 
-            '/home/duartetochas/Desktop/projetInf/main.py', 
+            '/home/tochas/ProjectInf/AutoGrading/main.py', 
             $absolutePath
         ]);
     

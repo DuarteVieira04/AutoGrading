@@ -21,6 +21,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
     ];
 
     /**
@@ -51,6 +52,31 @@ class User extends Authenticatable
     public function student()
     {
         return $this->hasOne(Student::class);
+    }
+
+    public function groups()
+    {
+        return $this->hasMany(Group::class, 'created_by_teacher_id');
+    }
+
+    public function processes()
+    {
+        return $this->hasMany(Process::class, 'teacher_id');
+    }
+
+    public function submissions()
+    {
+        return $this->hasMany(Submission::class, 'student_id');
+    }
+
+    public function groupOwnership()
+    {
+        return $this->hasMany(GroupOwner::class);
+    }
+
+    public function memberGroups()
+    {
+        return $this->belongsToMany(Group::class, 'group_owners', 'user_id', 'group_id');
     }
     
     public function hasRole(string $role)

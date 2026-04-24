@@ -7,47 +7,70 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use Illuminate\Support\Facades\Process;
+use App\Models\Process;
+use App\Models\Group;
 
 class GradingProcessController extends Controller
 {
     public function index(): View
     {
-        $processes = GradingProcess::query()
-            ->whereNotNull('id')
-            ->get();
+        $gradingProcesses = Process::whereHas('groups.users', function ($q) {
+            $q->where('users.id', auth()->id());
+        })->get();
 
-        return view('grading-processes.index', compact('processes'));
+        return view('grading-processes.index', compact('gradingProcesses'));
     }
 
     public function create(): View
     {
-        return view('grading-processes.create');
+        return view('grading-processes.create', [
+            'groups' => Group::all(),
+        ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
-        $data = $this->validated($request);
+        $validated = $request->validate([
+            'groups' => 'nullable|array',
+            'groups.*' => 'exists:groups,id',
+        ]);
 
-        GradingProcess::create($data);
+        $process = Process::create([
+            'teacher_id' => auth()->id(),
+        ]);
+
+        if (!empty($validated['groups'])) {
+            $process->groups()->sync($validated['groups']);
+        }
+
+        return redirect()->route('grading-processes.index')
+            ->with('status', 'Processo criado.');
+    }
+
+    public function edit(Process $grading_process)
+    {
+        $process->load('groups');
+
+        return view('grading-processes.edit', [
+            'process' => $process,
+            'groups' => Group::all(),
+        ]);
+    }
+
+    public function update(Request $request, Process $grading_process)
+    {
+        $validated = $request->validate([
+            'groups' => 'nullable|array',
+            'groups.*' => 'exists:groups,id',
+        ]);
+
+        $process->update($validated);
+
+        $process->groups()->sync($validated['groups'] ?? []);
 
         return redirect()
             ->route('grading-processes.index')
-            ->with('status', __('Processo de correção criado.'));
-    }
-
-    public function edit(GradingProcess $gradingProcess): View
-    {
-        return view('grading-processes.edit', ['process' => $gradingProcess]);
-    }
-
-    public function update(Request $request, GradingProcess $gradingProcess): RedirectResponse
-    {
-        $gradingProcess->update($this->validated($request));
-
-        return redirect()
-            ->route('grading-processes.index')
-            ->with('status', __('Processo atualizado.'));
+            ->with('status', 'Processo atualizado.');
     }
     
     public function destroy(GradingProcess $gradingProcess): RedirectResponse

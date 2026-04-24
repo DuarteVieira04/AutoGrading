@@ -13,12 +13,17 @@
                         </x-nav-link>
                         @if (Route::has('submissions.index'))
                             <x-nav-link :href="route('submissions.index')" :active="request()->routeIs('submissions.*')">
-                                {{ __('Submissions') }}
+                                {{ __('Submissões') }}
                             </x-nav-link>
                         @endif
-                        @if (Route::has('grading-processes.index') && auth()->user()->hasRole('teacher'))
-                            <x-nav-link :href="route('grading-processes.index')" :active="request()->routeIs('grading-processes.*')">
+                        @if (Route::has('processes.index') && auth()->user()->hasRole('teacher'))
+                            <x-nav-link :href="route('processes.index')" :active="request()->routeIs('processes.*')">
                                 {{ __('Processos de correção') }}
+                            </x-nav-link>
+                        @endif
+                        @if (Route::has('groups.index') && auth()->user()->hasRole('teacher'))
+                            <x-nav-link :href="route('groups.index')" :active="request()->routeIs('groups.*')">
+                                {{ __('Grupos') }}
                             </x-nav-link>
                         @endif
                     </div>

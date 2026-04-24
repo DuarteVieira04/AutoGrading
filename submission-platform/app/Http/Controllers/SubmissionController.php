@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\GradeProjectSubmissionJob;
 use App\Models\GradingProcess;
 use App\Models\ProjectSubmissions;
+use App\Models\Submission;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -18,12 +19,15 @@ class SubmissionController extends Controller
         $user = auth()->user();
         $student = $user->student;
         $submissions = $student
-            ? $student->codeDeliveries()->latest()->get()
+            ? $student->codeDeliveries()->latest()->with('student.user')->get()
             : collect();
+
+        $groups = $student ? $student->user->memberGroups()->get() : collect();
 
         return view('submissions.index', [
             'submissions' => $submissions,
             'hasStudentProfile' => (bool) $student,
+            'groups' => $groups,
         ]);
     }
 
@@ -136,5 +140,67 @@ class SubmissionController extends Controller
         }));
 
         return implode('/', $parts) ?: 'file.bin';
+    }
+
+    public function apiIndex()
+    {
+        $submissions = Submission::with('process', 'student', 'submissionResult')->get();
+        return response()->json($submissions);
+    }
+
+    public function apiStore(Request $request)
+    {
+        $validated = $request->validate([
+            'evaluation_process_id' => 'required|exists:processes,id',
+            'student_id' => 'required|exists:users,id',
+            'zip_file_path' => 'nullable|string',
+            'status' => 'nullable|string',
+            'submission_date' => 'nullable|date',
+        ]);
+
+        $submission = Submission::create($validated);
+        return response()->json($submission, 201);
+    }
+
+    public function apiShow(Submission $submission)
+    {
+        $submission->load('process', 'student', 'submissionResult.testExecutions');
+        return response()->json($submission);
+    }
+
+    public function apiUpdate(Request $request, Submission $submission)
+    {
+        $validated = $request->validate([
+            'evaluation_process_id' => 'sometimes|exists:processes,id',
+            'student_id' => 'sometimes|exists:users,id',
+            'zip_file_path' => 'nullable|string',
+            'status' => 'nullable|string',
+            'submission_date' => 'nullable|date',
+        ]);
+
+        $submission->update($validated);
+        return response()->json($submission);
+    }
+
+    public function apiDestroy(Submission $submission)
+    {
+        $submission->delete();
+        return response()->json(null, 204);
+    }
+
+    public function getByProcess($processId)
+    {
+        $submissions = Submission::where('evaluation_process_id', $processId)
+            ->with('process', 'student', 'submissionResult')
+            ->get();
+        return response()->json($submissions);
+    }
+
+    public function getByStudent($studentId)
+    {
+        $submissions = Submission::where('student_id', $studentId)
+            ->with('process', 'student', 'submissionResult')
+            ->get();
+        return response()->json($submissions);
     }
 }

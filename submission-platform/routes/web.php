@@ -1,8 +1,9 @@
 <?php
 
-use App\Http\Controllers\GradingProcessController;
+use App\Http\Controllers\ProcessController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectSubmissionController;
+use App\Http\Controllers\GroupController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -14,8 +15,13 @@ Route::get('/dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'teacher'])->group(function () {
-    Route::resource('grading-processes', GradingProcessController::class)->except(['show']);
-});
+    Route::resource('processes', ProcessController::class)->except(['show']);
+    Route::resource('groups', GroupController::class);
+    Route::post('groups/{group}/users', [GroupController::class, 'addStudent'])->name('groups.addStudent');
+    Route::delete('groups/{group}/users/{user}', [GroupController::class, 'removeStudent'])->name('groups.removeStudent');
+    Route::get('/groups/{group}/students', [GroupController::class, 'students'])
+    ->name('groups.students');
+    });
 
 Route::middleware('auth')->group(function () {
     Route::get('/submissions', [ProjectSubmissionController::class, 'index'])->name('submissions.index');
