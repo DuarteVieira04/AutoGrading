@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Process;
 
 class GradingProcess extends Model
 {
@@ -16,6 +17,7 @@ class GradingProcess extends Model
         'submission_start_date',
         'submission_end_date',
         'end_date',
+        'process_id',
     ];
 
     protected $casts = [
@@ -32,6 +34,11 @@ class GradingProcess extends Model
     public function projectSubmission(): HasMany
     {
         return $this->hasMany(ProjectSubmission::class, 'grading_process_id');
+    }
+
+    public function process()
+    {
+        return $this->belongsTo(Process::class);
     }
 
     public static function active(): ?self

@@ -38,9 +38,7 @@
                         class="mt-2 block w-full text-sm text-gray-800 border-gray-300 rounded-md">
                     <option value="">{{ __('Select a grading process') }}</option>
                     @foreach ($gradingProcesses as $process)
-                        @if ($process->is_active)
-                            <option value="{{ $process->id }}">{{ $process->name }}</option>
-                        @endif
+                        <option value="{{ $process->id }}">{{ $process->process_name }}</option>
                     @endforeach
                 </select>
                 @error('grading_process_id')

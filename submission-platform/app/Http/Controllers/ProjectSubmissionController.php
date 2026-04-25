@@ -2,11 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\GradeProjectSubmissionJob;
 use App\Models\GradingProcess;
+use App\Models\Process as EvaluationProcess;
 use App\Models\ProjectSubmission;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Process;
 
 class ProjectSubmissionController extends Controller
@@ -14,14 +13,29 @@ class ProjectSubmissionController extends Controller
 
     public function index()
     {
+        $student = auth()->user()->student;
+
         $submissions = ProjectSubmission::with(['student.user', 'gradingProcess'])
+            ->when($student, function ($query) use ($student) {
+                return $query->where('student_id', $student->id);
+            })
             ->latest()
             ->get();
+        $gradingProcesses = collect();
+
+        if ($student) {
+            $groupIds = auth()->user()->memberGroups->pluck('id');
+
+            $gradingProcesses = EvaluationProcess::whereHas('groups', function ($query) use ($groupIds) {
+                $query->whereIn('groups.id', $groupIds);
+            })->distinct()->get();
+        }
 
         return view('submissions.index', [
             'submissions' => $submissions,
-            'hasStudentProfile' => auth()->user()->student ?? false,
-            'gradingProcesses' => \App\Models\GradingProcess::all(),
+            'hasStudentProfile' => $student !== null,
+            'gradingProcesses' => $gradingProcesses,
+            'groups' => auth()->user()->memberGroups ?? collect(),
         ]);
     }
 
@@ -31,43 +45,53 @@ class ProjectSubmissionController extends Controller
 
         $student = auth()->user()->student;
 
-        $process = Process::findOrFail($request->grading_process_id);
+        $request->validate([
+            'student_id' => 'required|exists:students,id',
+            'grading_process_id' => 'required|exists:processes,id',
+            'file' => 'required|file|mimes:zip|max:512000',
+        ]);
+
+        $process = EvaluationProcess::findOrFail($request->grading_process_id);
 
         $allowed = $process->groups()
-        ->whereHas('users', function ($q) use ($student) {
-            $q->where('users.id', $student->user_id);
-        })
-        ->exists();
+            ->whereHas('users', function ($q) use ($student) {
+                $q->where('users.id', $student->user_id);
+            })
+            ->exists();
 
         if (!$allowed) {
             return back()->withErrors([
                 'grading_process_id' => 'You are not allowed to submit to this process.'
             ]);
         }
-        
-        $request->validate([
-            'student_id' => 'required|exists:students,id',
-            'grading_process_id' => 'required|exists:grading_processes,id',
-            'file' => 'required|file|mimes:zip|max:512000',
-        ]);
 
         $file = $request->file('file');
-        $path = $file->store('submissions', 'public');
+        $path = $file->store('submissions');
+        $absolutePath = storage_path('app/' . $path);
+
+        $gradingProcess = GradingProcess::firstOrCreate(
+            ['process_id' => $process->id],
+            [
+                'name' => $process->process_name,
+                'description' => "Auto-generated grading process for {$process->process_name}",
+                'components' => ['app', 'routes', 'resources'],
+                'is_active' => true,
+                'start_date' => now(),
+                'submission_start_date' => now(),
+                'submission_end_date' => now()->addWeek(),
+                'end_date' => now()->addWeek(),
+            ]
+        );
 
         try {
             $submission = ProjectSubmission::create([
                 'student_id' => $request->student_id,
-                'grading_process_id' => GradingProcess::active()?->id,
+                'grading_process_id' => $gradingProcess->id,
                 'file_path' => $path,
                 'status' => 'pending',
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
-        }
-
-        if ($request->hasFile('file')) {
-            $path = $request->file('file')->store('submissions');
-            $absolutePath = storage_path('app/' . $path);
         }
 
         $result = Process::run([
@@ -108,15 +132,5 @@ class ProjectSubmissionController extends Controller
 
         $projectSubmission->update($request->only(['status', 'feedback', 'grade']));
         return response()->json($projectSubmission);
-    }
-
-
-    public function destroy(GradingProcess $gradingProcess): RedirectResponse
-    {
-        $gradingProcess->delete();
-
-        return redirect()
-            ->route('grading-processes.index')
-            ->with('status', __('Processo removido.'));
     }
 }
