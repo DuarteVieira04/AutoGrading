@@ -7,10 +7,20 @@ use Illuminate\Http\Request;
 
 class ProcessTypeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $processTypes = ProcessType::with('processes')->get();
-        return response()->json($processTypes);
+        $processTypes = ProcessType::withCount('processes')->get();
+
+        if ($request->wantsJson()) {
+            return response()->json($processTypes);
+        }
+
+        return view('process_types.index', compact('processTypes'));
+    }
+
+    public function create()
+    {
+        return view('process_types.create');
     }
 
     public function store(Request $request)
@@ -20,45 +30,79 @@ class ProcessTypeController extends Controller
         ]);
 
         $processType = ProcessType::create($validated);
-        return response()->json($processType, 201);
+
+        if ($request->wantsJson()) {
+            return response()->json($processType, 201);
+        }
+
+        return redirect()
+            ->route('process-types.index')
+            ->with('status', __('Tipo de processo criado.'));
     }
 
-    public function show(ProcessType $processType)
+    public function show(Request $request, ProcessType $processType)
     {
         $processType->load('processes');
-        return response()->json($processType);
+
+        if ($request->wantsJson()) {
+            return response()->json($processType);
+        }
+
+        return redirect()->route('process-types.index');
+    }
+
+    public function edit(ProcessType $processType)
+    {
+        return view('process_types.edit', compact('processType'));
     }
 
     public function update(Request $request, ProcessType $processType)
     {
+        if ($processType->isDefault()) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => __('O tipo padrão não pode ser editado.')], 403);
+            }
+
+            return redirect()
+                ->route('process-types.index')
+                ->with('status', __('O tipo padrão não pode ser editado.'));
+        }
+
         $validated = $request->validate([
-            'name' => 'sometimes|string|unique:process_types,name,' . $processType->id,
+            'name' => 'required|string|unique:process_types,name,' . $processType->id,
         ]);
 
         $processType->update($validated);
-        return response()->json($processType);
+
+        if ($request->wantsJson()) {
+            return response()->json($processType);
+        }
+
+        return redirect()
+            ->route('process-types.index')
+            ->with('status', __('Tipo de processo atualizado.'));
     }
 
-    public function destroy(ProcessType $processType)
+    public function destroy(Request $request, ProcessType $processType)
     {
+        if ($processType->isDefault()) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => __('O tipo padrão não pode ser eliminado.')], 403);
+            }
+
+            return redirect()
+                ->route('process-types.index')
+                ->with('status', __('O tipo padrão não pode ser eliminado.'));
+        }
+
         $processType->delete();
-        return response()->json(null, 204);
-    }
-}
 
-    /**
-     * Update the specified process type in storage.
-     */
-            'name' => 'sometimes|string|unique:process_types,name,' . $processType->id,
-        ]);
+        if ($request->wantsJson()) {
+            return response()->json(null, 204);
+        }
 
-        $processType->update($validated);
-        return response()->json($processType);
-    }
-
-    /**
-     * Remove the specified process type from storage.
-     */
-        return response()->json(null, 204);
+        return redirect()
+            ->route('process-types.index')
+            ->with('status', __('Tipo de processo eliminado.'));
     }
 }

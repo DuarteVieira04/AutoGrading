@@ -9,6 +9,8 @@ class ProcessType extends Model
 {
     use HasFactory;
 
+    public const DEFAULT_NAME = 'Default';
+
     protected $fillable = [
         'name',
     ];
@@ -16,5 +18,10 @@ class ProcessType extends Model
     public function processes()
     {
         return $this->hasMany(Process::class);
+    }
+
+    public function isDefault(): bool
+    {
+        return $this->name === self::DEFAULT_NAME;
     }
 }

@@ -4,10 +4,16 @@
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
                 {{ __('Processos de correção automática') }}
             </h2>
-            <a href="{{ route('processes.create') }}"
-               class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-                {{ __('Novo processo') }}
-            </a>
+            <div class="flex flex-wrap items-center gap-3">
+                <a href="{{ route('process-types.index') }}"
+                   class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                    {{ __('Tipos de processo') }}
+                </a>
+                <a href="{{ route('processes.create') }}"
+                   class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                    {{ __('Novo processo') }}
+                </a>
+            </div>
         </div>
     </x-slot>
 
@@ -121,7 +127,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                                <td colspan="6" class="px-4 py-8 text-center text-gray-500">
                                     {{ __('Nenhum processo. Crie um novo processo para começar.') }}
                                 </td>
                             </tr>

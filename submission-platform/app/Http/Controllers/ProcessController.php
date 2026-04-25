@@ -23,6 +23,7 @@ class ProcessController extends Controller
     {
         return view('processes.create', [
             'groups' => Group::all(),
+            'processTypes' => ProcessType::all(),
         ]);
     }
 
@@ -32,15 +33,16 @@ class ProcessController extends Controller
             'process_name' => 'nullable|string|max:255',
             'open_date' => 'nullable|string',
             'close_date' => 'nullable|string',
+            'process_type_id' => 'nullable|exists:process_types,id',
             'groups' => 'nullable|array',
             'groups.*' => 'exists:groups,id',
         ]);
 
-        $defaultProcessType = ProcessType::first();
+        $processType = ProcessType::find($validated['process_type_id']) ?: ProcessType::firstOrCreate(['name' => ProcessType::DEFAULT_NAME]);
 
         $data = [
             'teacher_id' => auth()->id(),
-            'process_type_id' => $defaultProcessType->id,
+            'process_type_id' => $processType->id,
             'process_name' => $validated['process_name'] ?? null,
         ];
 
@@ -69,6 +71,7 @@ class ProcessController extends Controller
         return view('processes.edit', [
             'process' => $process,
             'groups' => Group::all(),
+            'processTypes' => ProcessType::all(),
         ]);
     }
 
@@ -78,13 +81,22 @@ class ProcessController extends Controller
             'process_name' => 'nullable|string|max:255',
             'open_date' => 'nullable|string',
             'close_date' => 'nullable|string',
+            'process_type_id' => 'nullable|exists:process_types,id',
             'groups' => 'nullable|array',
             'groups.*' => 'exists:groups,id',
         ]);
 
+        if (!empty($validated['process_type_id'])) {
+            $process->process_type_id = $validated['process_type_id'];
+        }
+
         $data = [
             'process_name' => $validated['process_name'] ?? null,
         ];
+
+        if (!empty($validated['process_type_id'])) {
+            $data['process_type_id'] = $validated['process_type_id'];
+        }
 
         // Convert dates from d/m/y H:i to Y-m-d H:i:s
         if ($validated['open_date']) {

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProcessController;
+use App\Http\Controllers\ProcessTypeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectSubmissionController;
 use App\Http\Controllers\GroupController;
@@ -16,6 +17,7 @@ Route::get('/dashboard', function () {
 
 Route::middleware(['auth', 'teacher'])->group(function () {
     Route::resource('processes', ProcessController::class)->except(['show']);
+    Route::resource('process-types', ProcessTypeController::class)->except(['show']);
     Route::resource('groups', GroupController::class);
     Route::post('groups/{group}/users', [GroupController::class, 'addStudent'])->name('groups.addStudent');
     Route::delete('groups/{group}/users/{user}', [GroupController::class, 'removeStudent'])->name('groups.removeStudent');
