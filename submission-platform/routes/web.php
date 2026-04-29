@@ -28,6 +28,7 @@ Route::middleware(['auth', 'teacher'])->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/submissions', [ProjectSubmissionController::class, 'index'])->name('submissions.index');
     Route::post('/submissions', [ProjectSubmissionController::class, 'store'])->name('submissions.store');
+    Route::get('/submissions/{projectSubmission}', [ProjectSubmissionController::class, 'show'])->name('submissions.show');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

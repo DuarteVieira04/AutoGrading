@@ -98,28 +98,38 @@
                                         @endif
                                     </td>
                                     <td class="px-4 py-2 text-gray-800 align-top max-w-md">
+                                        @php
+                                            $summary = data_get($row->feedback, 'results.summary', []);
+                                            $successful = $summary['successful'] ?? null;
+                                            $totalTests = $summary['total_tests'] ?? null;
+                                            $hasSummary = $successful !== null && $totalTests !== null;
+                                            $passed = $hasSummary && $successful === $totalTests && $row->status === 'graded';
+                                        @endphp
+
                                         @if ($row->status === 'processing' || $row->status === 'pending')
                                             <span class="text-gray-500">{{ __('Waiting for automatic grading…') }}</span>
-                                        @elseif (! empty($row->feedback['results']['summary']))
-                                            @php $s = $row->feedback['results']['summary']; @endphp
-                                            <span class="text-sm">
-                                                {{ __('Tests passed') }}:
-                                                {{ $s['successful'] ?? 0 }} / {{ $s['total_tests'] ?? 0 }}
-                                                @if (! empty($s['duration']))
-                                                    · {{ round((float) $s['duration'], 1) }}s
-                                                @endif
+                                        @elseif ($hasSummary)
+                                            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                {{ $passed ? __('Passed') : __('Failed') }}
                                             </span>
+                                            <div class="mt-1 text-sm text-gray-600">
+                                                {{ __('Tests passed') }}: {{ $successful }} / {{ $totalTests }}
+                                                @if (! empty($summary['duration']))
+                                                    · {{ round((float) $summary['duration'], 1) }}s
+                                                @endif
+                                            </div>
                                         @elseif (! empty($row->feedback['error']))
-                                            <span class="text-red-700 text-sm">{{ \Illuminate\Support\Str::limit($row->feedback['error'], 200) }}</span>
+                                            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800">{{ __('Failed') }}</span>
+                                            <div class="mt-1 text-sm text-red-700">{{ \Illuminate\Support\Str::limit($row->feedback['error'], 200) }}</div>
                                         @else
-                                            —
+                                            <span class="text-gray-500">—</span>
                                         @endif
-                                        @if (! empty($row->feedback) && is_array($row->feedback))
-                                            <details class="mt-2 text-xs">
-                                                <summary class="cursor-pointer text-gray-600 hover:underline">{{ __('Full details') }}</summary>
-                                                <pre class="mt-2 max-h-64 overflow-auto rounded border border-gray-200 bg-gray-50 p-2 text-xs">{{ json_encode($row->feedback, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
-                                            </details>
-                                        @endif
+
+                                        <div class="mt-3">
+                                            <a href="{{ route('submissions.show', $row) }}" class="inline-flex items-center rounded border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-900 hover:bg-gray-50">
+                                                {{ __('View details') }}
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                             @endforeach

@@ -94,23 +94,54 @@ class ProjectSubmissionController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
 
-        $result = Process::run([
-            'python3', 
-            '/home/tochas/ProjectInf/AutoGrading/main.py', 
-            $absolutePath
-        ]);
-    
-        if ($result->successful()) {
-            $submission->update([
-                'status' => 'graded',
-                'feedback' => ['output' => $result->output()]
-            ]);
-        } else {
-            $submission->update([
-                'status' => 'failed',
-                'feedback' => ['error' => $result->errorOutput()]
-            ]);
+        $resultPath = storage_path('app/autograding/submission_'.$submission->id.'_result.json');
+        $resultDir = dirname($resultPath);
+        if (! is_dir($resultDir)) {
+            mkdir($resultDir, 0755, true);
         }
+
+        $result = Process::run([
+            'python3',
+            '/home/tochas/ProjectInf/AutoGrading/main.py',
+            $absolutePath,
+            $submission->student->user->name ?? 'Anonymous',
+            '--result-json',
+            $resultPath,
+        ]);
+
+        $feedback = [];
+        $status = 'failed';
+        $grade = null;
+
+        if (is_file($resultPath)) {
+            $json = file_get_contents($resultPath);
+            $payload = json_decode($json, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($payload)) {
+                $feedback = $payload;
+                $summary = data_get($payload, 'results.summary', []);
+                $grade = isset($summary['success_rate']) ? round((float) $summary['success_rate'], 2) : null;
+                $status = isset($summary['total_tests']) ? 'graded' : 'failed';
+            } else {
+                $feedback = [
+                    'error' => 'Invalid JSON returned by autograding.',
+                    'detail' => json_last_error_msg(),
+                    'raw_output' => $result->output() ?: $result->errorOutput(),
+                ];
+            }
+        } else {
+            $feedback = [
+                'error' => 'Autograding did not produce a result file.',
+                'output' => $result->output(),
+                'stderr' => $result->errorOutput(),
+            ];
+        }
+
+        $submission->update([
+            'status' => $status,
+            'feedback' => $feedback,
+            'grade' => $grade,
+        ]);
 
         return redirect()
         ->route('submissions.index')
@@ -119,7 +150,9 @@ class ProjectSubmissionController extends Controller
 
     public function show(ProjectSubmission $projectSubmission)
     {
-        return $projectSubmission->load('student.user');
+        return view('submissions.show', [
+            'submission' => $projectSubmission->load('student.user', 'gradingProcess'),
+        ]);
     }
 
     public function update(Request $request, ProjectSubmission $projectSubmission)
