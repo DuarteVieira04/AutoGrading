@@ -9,7 +9,7 @@
                     <!-- Navigation Links -->
                     <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                         <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                            {{ __('Dashboard') }}
+                            {{ __('Painel') }}
                         </x-nav-link>
                         @if (Route::has('submissions.index'))
                             <x-nav-link :href="route('submissions.index')" :active="request()->routeIs('submissions.*')">
@@ -48,7 +48,7 @@
 
                         <x-slot name="content">
                             <x-dropdown-link :href="route('profile.edit')">
-                                {{ __('Profile') }}
+                                {{ __('Perfil') }}
                             </x-dropdown-link>
 
                             <form method="POST" action="{{ route('logout') }}">
@@ -57,7 +57,7 @@
                                 <x-dropdown-link :href="route('logout')"
                                         onclick="event.preventDefault();
                                                     this.closest('form').submit();">
-                                    {{ __('Log Out') }}
+                                    {{ __('Terminar sessão') }}
                                 </x-dropdown-link>
                             </form>
                         </x-slot>
@@ -65,10 +65,10 @@
                 @else
                     <div class="flex items-center gap-4 text-sm">
                         @if (Route::has('login'))
-                            <a href="{{ route('login') }}" class="font-medium text-gray-600 hover:text-gray-900">{{ __('Log in') }}</a>
+                            <a href="{{ route('login') }}" class="font-medium text-gray-600 hover:text-gray-900">{{ __('Iniciar sessão') }}</a>
                         @endif
                         @if (Route::has('register'))
-                            <a href="{{ route('register') }}" class="font-medium text-gray-600 hover:text-gray-900">{{ __('Register') }}</a>
+                            <a href="{{ route('register') }}" class="font-medium text-gray-600 hover:text-gray-900">{{ __('Registar') }}</a>
                         @endif
                     </div>
                 @endauth
@@ -95,12 +95,7 @@
                 </x-responsive-nav-link>
                 @if (Route::has('submissions.index'))
                     <x-responsive-nav-link :href="route('submissions.index')" :active="request()->routeIs('submissions.*')">
-                        {{ __('Submissions') }}
-                    </x-responsive-nav-link>
-                @endif
-                @if (Route::has('grading-processes.index') && auth()->user()->hasRole('teacher'))
-                    <x-responsive-nav-link :href="route('grading-processes.index')" :active="request()->routeIs('grading-processes.*')">
-                        {{ __('Processos de correção') }}
+                        {{ __('Submissões') }}
                     </x-responsive-nav-link>
                 @endif
             </div>
@@ -113,7 +108,7 @@
 
                 <div class="mt-3 space-y-1">
                     <x-responsive-nav-link :href="route('profile.edit')">
-                        {{ __('Profile') }}
+                        {{ __('Perfil') }}
                     </x-responsive-nav-link>
 
                     <form method="POST" action="{{ route('logout') }}">
@@ -131,12 +126,12 @@
             <div class="pt-2 pb-3 space-y-1 px-4">
                 @if (Route::has('login'))
                     <x-responsive-nav-link :href="route('login')">
-                        {{ __('Log in') }}
+                        {{ __('Iniciar sessão') }}
                     </x-responsive-nav-link>
                 @endif
                 @if (Route::has('register'))
                     <x-responsive-nav-link :href="route('register')">
-                        {{ __('Register') }}
+                        {{ __('Registar') }}
                     </x-responsive-nav-link>
                 @endif
             </div>

@@ -8,7 +8,7 @@ return [
     'enabled' => env('AUTOGRADING_ENABLED', true),
 
     /** Caminho absoluto para a pasta que contém main.py, base-project, testing-project */
-    'project_root' => env('AUTOGRADING_PROJECT_ROOT', dirname(base_path())),
+    'project_root' => env('AUTOGRADING_PROJECT_ROOT') ?: dirname(base_path()),
 
     'python_binary' => env('AUTOGRADING_PYTHON', 'python3'),
 

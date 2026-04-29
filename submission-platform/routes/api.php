@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\ProjectSubmissionController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\GroupController;
@@ -32,12 +31,17 @@ Route::delete('students/{student}', [StudentController::class, 'destroy'])->midd
 Route::middleware(['auth:sanctum', 'teacher'])->as('api.')->group(function () {
     Route::apiResource('students', StudentController::class);
     Route::apiResource('teachers', TeacherController::class);
-    Route::apiResource('project-submissions', ProjectSubmissionController::class);
     Route::apiResource('groups', GroupController::class);
     Route::apiResource('processes', ProcessController::class);
     Route::apiResource('process-types', ProcessTypeController::class);
     Route::apiResource('submission-results', SubmissionResultController::class);
     Route::apiResource('test-executions', TestExecutionController::class);
+
+    Route::get('submissions', [SubmissionController::class, 'apiIndex']);
+    Route::post('submissions', [SubmissionController::class, 'apiStore']);
+    Route::get('submissions/{submission}', [SubmissionController::class, 'apiShow']);
+    Route::put('submissions/{submission}', [SubmissionController::class, 'apiUpdate']);
+    Route::delete('submissions/{submission}', [SubmissionController::class, 'apiDestroy']);
     
     // Group routes
     Route::post('groups/{group}/users', [GroupController::class, 'addUser']);

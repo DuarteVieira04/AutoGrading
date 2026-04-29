@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\ProjectSubmissions;
+use App\Models\Submission;
 use App\Services\AutoGradingRunner;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -11,17 +11,17 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Throwable;
 
-class GradeProjectSubmissionJob implements ShouldQueue
+class GradeSubmissionJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
 
-    public function __construct(public int $projectSubmissionId) {}
+    public function __construct(public int $submissionId) {}
 
     public function handle(AutoGradingRunner $runner): void
     {
-        $submission = ProjectSubmissions::query()->find($this->projectSubmissionId);
+        $submission = Submission::query()->find($this->submissionId);
         if (! $submission) {
             return;
         }
@@ -31,14 +31,11 @@ class GradeProjectSubmissionJob implements ShouldQueue
 
     public function failed(?Throwable $exception): void
     {
-        $submission = ProjectSubmissions::query()->find($this->projectSubmissionId);
+        $submission = Submission::query()->find($this->submissionId);
+
         if ($submission && $submission->status === 'processing') {
             $submission->update([
                 'status' => 'failed',
-                'feedback' => [
-                    'error' => 'Fila de correção falhou.',
-                    'detail' => $exception?->getMessage(),
-                ],
             ]);
         }
     }

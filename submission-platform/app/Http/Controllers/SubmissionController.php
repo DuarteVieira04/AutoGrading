@@ -2,15 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\GradeProjectSubmissionJob;
-use App\Models\GradingProcess;
-use App\Models\ProjectSubmissions;
+use App\Jobs\GradeSubmissionJob;
+use App\Models\Process;
 use App\Models\Submission;
+use App\Services\AutoGradingRunner;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
-use ZipArchive;
 
 class SubmissionController extends Controller
 {
@@ -18,20 +14,33 @@ class SubmissionController extends Controller
     {
         $user = auth()->user();
         $student = $user->student;
+
         $submissions = $student
-            ? $student->codeDeliveries()->latest()->with('student.user')->get()
+            ? Submission::with(['process', 'submissionResult.testExecutions'])
+                ->where('student_id', $user->id)
+                ->latest()
+                ->get()
             : collect();
 
-        $groups = $student ? $student->user->memberGroups()->get() : collect();
+        $groups = $user->memberGroups ?? collect();
+        $processes = collect();
+
+        if ($student) {
+            $groupIds = $user->memberGroups->pluck('id');
+            $processes = Process::whereHas('groups', function ($query) use ($groupIds) {
+                $query->whereIn('groups.id', $groupIds);
+            })->distinct()->get();
+        }
 
         return view('submissions.index', [
             'submissions' => $submissions,
             'hasStudentProfile' => (bool) $student,
             'groups' => $groups,
+            'processes' => $processes,
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, AutoGradingRunner $runner)
     {
         $user = $request->user();
         $student = $user->student;
@@ -43,108 +52,59 @@ class SubmissionController extends Controller
         }
 
         $request->validate([
-            'zip_file' => 'required|file|mimes:zip|max:512000',
+            'evaluation_process_id' => 'required|exists:processes,id',
+            'file' => 'required|file|mimes:zip|max:512000',
         ]);
-  
-        $totalBytes = collect($request->file('zip_file'))->getSize();
-        if ($totalBytes > $maxBytes) {
+
+        $process = Process::findOrFail($request->input('evaluation_process_id'));
+        $allowed = $process->groups()
+            ->whereHas('users', function ($q) use ($user) {
+                $q->where('users.id', $user->id);
+            })
+            ->exists();
+
+        if (! $allowed) {
             return back()->withErrors([
-                'file' => __('Total folder size exceeds the maximum allowed (about 500 MB).'),
-            ])->withInput();
-        }
-
-        $submission = ProjectSubmissions::create([
-            'student_id' => $student->id,
-            'grading_process_id' => GradingProcess::active()?->id,
-            'file_path' => $path,
-            'status' => 'pending',
-        ]);
-
-        GradeProjectSubmissionJob::dispatch($submission->id)->afterCommit();
-
-        $studentId = auth()->id();
-
-        $folder = "zips/{$studentId}";
-
-        $path = $file->store($folder);
-
-        return redirect()
-            ->route('submissions.index')
-            ->with('status', __('Upload received. Automatic grading has been queued — refresh in a few moments for feedback.'));
-    }
-
-    private function storeFolderAsZip(array $uploadedFiles, int $studentId): string
-    {
-        $zipName = sprintf('submission-%d-%s.zip', $studentId, now()->format('YmdHis'));
-
-        $tempDir = storage_path('app/temp');
-        if (! is_dir($tempDir)) {
-            mkdir($tempDir, 0755, true);
-        }
-
-        $tempZip = $tempDir.DIRECTORY_SEPARATOR.uniqid('zip_', true).'.zip';
-
-        $zip = new ZipArchive;
-        if ($zip->open($tempZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            abort(500, 'Could not create archive.');
-        }
-
-        $added = 0;
-        foreach ($uploadedFiles as $uploadedFile) {
-            if (! $uploadedFile instanceof UploadedFile || ! $uploadedFile->isValid()) {
-                continue;
-            }
-
-            $relative = $this->zipEntryName($uploadedFile);
-            $realPath = $uploadedFile->getRealPath();
-            if ($realPath && is_file($realPath)) {
-                $zip->addFile($realPath, $relative);
-                $added++;
-            }
-        }
-
-        $zip->close();
-
-        if ($added === 0) {
-            @unlink($tempZip);
-
-            throw ValidationException::withMessages([
-                'files' => [__('No files could be packed from the selected folder. Try a ZIP upload instead.')],
+                'evaluation_process_id' => 'You are not allowed to submit to this process.',
             ]);
         }
 
-        $storedPath = Storage::disk('public')->putFileAs('submissions', $tempZip, $zipName);
+        $file = $request->file('file');
+        $path = $file->store('submissions');
 
-        @unlink($tempZip);
+        $submission = Submission::create([
+            'evaluation_process_id' => $process->id,
+            'student_id' => $user->id,
+            'zip_file_path' => $path,
+            'status' => 'pending',
+            'submission_date' => now(),
+        ]);
 
-        if ($storedPath === false) {
-            abort(500, 'Could not store archive.');
+        if (config('queue.default') === 'sync') {
+            $runner->grade($submission);
+        } elseif (config('queue.default') === 'database') {
+            GradeSubmissionJob::dispatchSync($submission->id);
+        } else {
+            GradeSubmissionJob::dispatch($submission->id)->afterCommit();
         }
 
-        return $storedPath;
+        return redirect()
+            ->route('submissions.index')
+            ->with('success', 'Submission received successfully!');
     }
 
-    private function zipEntryName(UploadedFile $uploadedFile): string
+    public function show(Submission $submission)
     {
-        $path = method_exists($uploadedFile, 'getClientOriginalPath')
-            ? $uploadedFile->getClientOriginalPath()
-            : '';
+        $submission->load('process', 'student', 'submissionResult.testExecutions');
 
-        if ($path === '' || $path === null) {
-            $path = $uploadedFile->getClientOriginalName();
-        }
-
-        $path = str_replace('\\', '/', (string) $path);
-        $parts = array_values(array_filter(explode('/', $path), function ($segment) {
-            return $segment !== '' && $segment !== '.' && $segment !== '..';
-        }));
-
-        return implode('/', $parts) ?: 'file.bin';
+        return view('submissions.show', [
+            'submission' => $submission,
+        ]);
     }
 
     public function apiIndex()
     {
-        $submissions = Submission::with('process', 'student', 'submissionResult')->get();
+        $submissions = Submission::with('process', 'student', 'submissionResult.testExecutions')->get();
         return response()->json($submissions);
     }
 

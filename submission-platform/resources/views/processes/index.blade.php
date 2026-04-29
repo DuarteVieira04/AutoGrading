@@ -52,6 +52,9 @@
                                 {{ __('Período de Fecho') }}
                             </th>
 
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">
+                                {{ __('Submissões') }}
+                            </th>
                             <th class="px-4 py-3 text-right font-medium text-gray-700">
                                 {{ __('Ações') }}
                             </th>
@@ -102,6 +105,14 @@
                                     @else
                                         —
                                     @endif
+                                </td>
+
+                                {{-- SUBMISSÕES --}}
+                                <td class="px-4 py-3 text-left">
+                                    <a href="{{ route('processes.submissions', $p) }}"
+                                       class="inline-flex items-center rounded border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-900 hover:bg-gray-50">
+                                        {{ __('Ver submissões') }}
+                                    </a>
                                 </td>
 
                                 {{-- ACTIONS --}}

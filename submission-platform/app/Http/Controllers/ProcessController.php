@@ -130,6 +130,19 @@ class ProcessController extends Controller
         }
     }
     
+    public function submissions(Process $process)
+    {
+        $process->load([
+            'submissions' => function ($query) {
+                $query->orderByDesc('submission_date')->orderByDesc('created_at');
+            },
+            'submissions.student',
+            'submissions.submissionResult',
+        ]);
+
+        return view('processes.submissions', compact('process'));
+    }
+
     public function destroy(Process $process): RedirectResponse
     {
         $process->delete();
