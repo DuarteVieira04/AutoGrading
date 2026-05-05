@@ -89,7 +89,15 @@ class AutoGradingRunner
 
         $log = Str::limit(trim($proc->getOutput()."\n".$proc->getErrorOutput()), 60000);
 
-        if (! is_file($resultPath)) {
+        $resultFilePath = null;
+        foreach (explode("\n", $log) as $line) {
+            if (str_starts_with($line, 'AUTOGRADING_RESULT_JSON=')) {
+                $resultFilePath = substr($line, strlen('AUTOGRADING_RESULT_JSON='));
+                break;
+            }
+        }
+
+        if (! $resultFilePath || ! is_file($resultFilePath)) {
             SubmissionResult::updateOrCreate(
                 ['submissions_id' => $submission->id],
                 [
@@ -106,7 +114,7 @@ class AutoGradingRunner
         }
 
         try {
-            $payload = json_decode(File::get($resultPath), true, 512, JSON_THROW_ON_ERROR);
+            $payload = json_decode(File::get($resultFilePath), true, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             SubmissionResult::updateOrCreate(
                 ['submissions_id' => $submission->id],

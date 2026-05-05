@@ -44,9 +44,10 @@ class ProcessController extends Controller
             'teacher_id' => auth()->id(),
             'process_type_id' => $processType->id,
             'process_name' => $validated['process_name'] ?? null,
+            'config' => $request->input('config', []),
         ];
 
-        // Convert dates from d/m/y H:i to Y-m-d H:i:s
+
         if ($validated['open_date']) {
             $data['open_date'] = $this->parseDateTime($validated['open_date']);
         }

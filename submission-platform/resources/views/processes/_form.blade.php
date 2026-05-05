@@ -86,4 +86,76 @@
         </div>
     </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+
+        {{-- TOTAL WEIGHTING --}}
+        <div>
+            <x-input-label for="weighting" :value="__('Peso total dos testes')" />
+
+            <input
+                id="weighting"
+                name="configuration[weighting]"
+                type="number"
+                step="0.1"
+                min="0"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                value="{{ old('configuration.weighting', $process->configuration['weighting'] ?? 1) }}"
+            />
+
+            <x-input-error class="mt-2" :messages="$errors->get('configuration.weighting')" />
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+
+        {{-- RESULTS VISIBILITY --}}
+        <div>
+          <x-input-label for="results_visibility" :value="__('Visibilidade dos resultados')" />
+
+            <select
+                id="results_visibility"
+                name="configuration[results_visibility]"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+            >
+                <option value="student"
+                    @selected(old('configuration.results_visibility', $process->configuration['results_visibility'] ?? 'student') === 'student')>
+                    Aluno
+                </option>
+
+                <option value="teacher"
+                    @selected(old('configuration.results_visibility', $process->configuration['results_visibility'] ?? '') === 'teacher')>
+                    Professor
+                </option>
+
+                <option value="both"
+                    @selected(old('configuration.results_visibility', $process->configuration['results_visibility'] ?? '') === 'both')>
+                    Ambos
+                </option>
+            </select>
+        </div>
+
+        {{-- RESULTS CRITERIA --}}
+        <div>
+            <x-input-label for="results_criteria" :value="__('Critério de avaliação')" />
+
+            <select
+                id="results_criteria"
+                name="configuration[results_criteria]"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+            >
+                <option value="final_grade"
+                    @selected(old('configuration.results_criteria', $process->configuration['results_criteria'] ?? 'final_grade') === 'final_grade')>
+                    Nota final
+                </option>
+
+                <option value="tests_only"
+                    @selected(old('configuration.results_criteria', $process->configuration['results_criteria'] ?? '') === 'tests_only')>
+                    Apenas testes
+                </option>
+            </select>
+        </div>
+
+    </div>  
+
+    
+
 </div>

@@ -27,6 +27,23 @@
             $payload = $result?->report_sent_payload ?? [];
             $summary = data_get($payload, 'results.summary', []);
             $tests = $result?->testExecutions ?? collect();
+            $payloadTests = collect(data_get($payload, 'results.tests', []));
+
+            if ($tests->isEmpty() && $payloadTests->isNotEmpty()) {
+                $tests = $payloadTests->map(function ($test) {
+                    return (object) [
+                        'test_name' => $test['name'] ?? __('Teste sem nome'),
+                        'status' => $test['status'] ?? 'unknown',
+                        'error_message' => $test['message'] ?? null,
+                        'execution_logs' => isset($test['logs'])
+                            ? (is_string($test['logs'])
+                                ? $test['logs']
+                                : json_encode($test['logs'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))
+                            : null,
+                    ];
+                });
+            }
+
             $hasTestRows = $tests->isNotEmpty();
             $hasSummary = $hasTestRows || ! empty($summary);
             $totalTests = $hasTestRows ? $tests->count() : ($summary['total_tests'] ?? 0);

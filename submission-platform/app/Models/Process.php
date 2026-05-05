@@ -21,12 +21,14 @@ class Process extends Model
         'weighting',
         'max_file_size_byte',
         'email_notification',
+        'config',
     ];
 
     protected $casts = [
         'open_date' => 'datetime',
         'close_date' => 'datetime',
         'email_notification' => 'boolean',
+        'config' => 'array',
     ];
 
     public function processType()

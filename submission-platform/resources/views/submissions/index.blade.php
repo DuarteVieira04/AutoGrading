@@ -70,6 +70,18 @@
                                     $result = $row->submissionResult;
                                     $summary = data_get($result?->report_sent_payload, 'results.summary', []);
                                     $tests = $result?->testExecutions ?? collect();
+                                    $payloadTests = collect(data_get($result?->report_sent_payload, 'results.tests', []));
+
+                                    if ($tests->isEmpty() && $payloadTests->isNotEmpty()) {
+                                        $tests = $payloadTests->map(function ($test) {
+                                            return (object) [
+                                                'test_name' => $test['name'] ?? __('Teste sem nome'),
+                                                'status' => $test['status'] ?? 'unknown',
+                                                'error_message' => $test['message'] ?? null,
+                                            ];
+                                        });
+                                    }
+
                                     $hasTests = $tests->isNotEmpty();
                                     $totalTests = $hasTests ? $tests->count() : ($summary['total_tests'] ?? 0);
                                     $passedCount = $hasTests ? $tests->where('status', 'passed')->count() : ($summary['successful'] ?? ($summary['passed'] ?? 0));
@@ -99,8 +111,10 @@
                                                 {{ $passed ? __('Aprovado') : __('Reprovado') }}
                                             </span>
                                             <div class="mt-1 text-sm text-gray-600">
-                                                {{ __('Tests passed') }}: {{ $passedCount }} / {{ $totalTests }}
+                                                {{ __('Testes passados') }}: {{ $passedCount }} / {{ $totalTests }}
                                             </div>
+
+                                            
                                         @elseif ($result && $result->report_sent)
                                             <div class="space-y-2">
                                                 <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">{{ __('Resultado pronto') }}</span>

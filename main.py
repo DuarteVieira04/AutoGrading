@@ -123,7 +123,7 @@ class AutoGrading:
                 return False
 
             self._log(f"Copying {project_folder} -> {self.WORKING_DIR}")
-            shutil.copytree(project_folder, self.WORKING_DIR)
+            shutil.copytree(self.BASE_PROJECT, self.WORKING_DIR)
 
             self.working_project = self.WORKING_DIR
             self._log("OK: Working project copied successfully")
@@ -175,7 +175,7 @@ class AutoGrading:
         try:
             for component in self.components_to_replace:
                 source = self._find_component_path(self.TMP_DIR / f"extract_{self.submission_id}", component)
-                destination = self.TESTING_DIR / component
+                destination = self.working_project / component
 
                 if not source:
                     self._log(f"WARNING: Component not found in ZIP: {component}")
@@ -197,6 +197,7 @@ class AutoGrading:
         except Exception as e:
             self._log(f"ERROR: Failed to replace components: {e}")
             return False
+            
 
     def _run_tests(self) -> Optional[str]:
         self._log("\n=== Run Tests ===")
@@ -320,6 +321,40 @@ class AutoGrading:
                 results["summary"]["total_tests"] * 100
             )
 
+        test_lines = [line.strip() for line in output.split("\n") if line.strip()]
+        for line in test_lines:
+            if "test" in line.lower() and ("passed" in line.lower() or "failed" in line.lower()):
+                if ":" in line:
+                    parts = line.split(":", 1)
+                    test_name = parts[0].strip()
+                    status_part = parts[1].strip().lower()
+                    status = "passed" if "passed" in status_part else "failed"
+                    results["tests"].append({
+                        "name": test_name,
+                        "status": status,
+                        "message": "",
+                    })
+                else:
+                    status = "passed" if "passed" in line.lower() else "failed"
+                    results["tests"].append({
+                        "name": line,
+                        "status": status,
+                        "message": "",
+                    })
+        if not results["tests"]:
+            for i in range(results["summary"]["successful"]):
+                results["tests"].append({
+                    "name": f"Test {i+1}",
+                    "status": "passed",
+                    "message": "",
+                })
+            for i in range(results["summary"]["failed"]):
+                results["tests"].append({
+                    "name": f"Test {results['summary']['successful'] + i + 1}",
+                    "status": "failed",
+                    "message": "",
+                })
+
         return results
 
     def _display_results(self, results: Dict):
@@ -355,13 +390,18 @@ class AutoGrading:
         self._log(f"\nStatus: {status}")
         self._log(f"Success Rate: {success_rate:.1f}%\n")
 
-        if results["tests"] and len(results["tests"]) <= 20:
+        if results["tests"]:
             self._log("Test Details:")
             for test in results["tests"]:
                 status_str = "PASS" if test["status"] == "passed" else "FAIL"
                 self._log(f"  [{status_str}] {test['name']}")
-                if test["message"]:
+                if test.get("message"):
                     self._log(f"       -> {test['message'][:100]}")
+                if test.get("logs") is not None:
+                    logs = test["logs"]
+                    if not isinstance(logs, str):
+                        logs = json.dumps(logs, ensure_ascii=False)
+                    self._log(f"       logs: {logs}")
 
         self._log("=" * 60 + "\n")
 
