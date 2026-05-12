@@ -21,7 +21,9 @@ class GradeSubmissionJob implements ShouldQueue
 
     public function handle(AutoGradingRunner $runner): void
     {
-        $submission = Submission::query()->find($this->submissionId);
+        $submission = Submission::query()
+            ->with(['process', 'processTestGroup'])
+            ->find($this->submissionId);
         if (! $submission) {
             return;
         }

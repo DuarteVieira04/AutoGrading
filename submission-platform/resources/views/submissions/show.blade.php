@@ -81,6 +81,65 @@
                     <p class="text-sm text-gray-900">{{ $submission->process->process_name ?? '—' }}</p>
                 </div>
                 <div class="space-y-1">
+                    <p class="text-sm font-semibold text-gray-700">{{ __('Grupo de testes') }}</p>
+                    <p class="text-sm text-gray-900">
+                        @if ($submission->processTestGroup)
+                            {{ $submission->processTestGroup->name }} ({{ $submission->processTestGroup->path_pattern }})
+                        @else
+                            —
+                        @endif
+                    </p>
+                </div>
+                @php
+                    $payloadCfg = $submission->submissionResult?->report_sent_payload;
+                    $suiteCfgs = data_get($payloadCfg, 'autograding_process_config.suite_configs', []);
+                    $suiteDetail = null;
+                    $patShow = $submission->processTestGroup->path_pattern ?? '';
+                    foreach (preg_split('/[\s,]+/', trim($patShow), -1, PREG_SPLIT_NO_EMPTY) as $seg) {
+                        $seg = trim(str_replace('\\', '/', $seg), '/');
+                        if ($seg !== '' && isset($suiteCfgs[$seg]) && is_array($suiteCfgs[$seg])) {
+                            $suiteDetail = \App\Support\SuiteAutograding::normalize($suiteCfgs[$seg]);
+                            break;
+                        }
+                    }
+                    if ($suiteDetail === null && $patShow !== '') {
+                        $suiteDetail = \App\Support\SuiteAutograding::read($patShow);
+                    }
+                @endphp
+                @if ($suiteDetail && array_filter($suiteDetail))
+                    @if (isset($suiteDetail['weight']))
+                        <div class="space-y-1">
+                            <p class="text-sm font-semibold text-gray-700">{{ __('Peso') }}</p>
+                            <p class="text-sm text-gray-900">{{ $suiteDetail['weight'] }}</p>
+                        </div>
+                    @endif
+                    @if (! empty($suiteDetail['visibility']))
+                        <div class="space-y-1">
+                            <p class="text-sm font-semibold text-gray-700">{{ __('Visibilidade') }}</p>
+                            <p class="text-sm text-gray-900">
+                                @switch($suiteDetail['visibility'])
+                                    @case('student') {{ __('Aluno') }} @break
+                                    @case('teacher') {{ __('Professor') }} @break
+                                    @case('both') {{ __('Ambos') }} @break
+                                    @default {{ $suiteDetail['visibility'] }}
+                                @endswitch
+                            </p>
+                        </div>
+                    @endif
+                    @if (! empty($suiteDetail['purpose']))
+                        <div class="space-y-1">
+                            <p class="text-sm font-semibold text-gray-700">{{ __('Finalidade') }}</p>
+                            <p class="text-sm text-gray-900">
+                                @switch($suiteDetail['purpose'])
+                                    @case('formative') {{ __('Formativa') }} @break
+                                    @case('summative') {{ __('Sumativa') }} @break
+                                    @default {{ $suiteDetail['purpose'] }}
+                                @endswitch
+                            </p>
+                        </div>
+                    @endif
+                @endif
+                <div class="space-y-1">
                     <p class="text-sm font-semibold text-gray-700">{{ __('Estado') }}</p>
                     <p class="text-sm text-gray-900">{{ ucfirst($submission->status) }}</p>
                 </div>
@@ -248,7 +307,13 @@
                                             {{ ucfirst($test->status ?? __('desconhecido')) }}
                                         </span>
                                     </td>
-                                    <td class="px-4 py-3 text-gray-700">{{ $test->error_message ?? '—' }}</td>
+                                    <td class="max-w-3xl px-4 py-3 align-top text-gray-700">
+                                        @if (! empty($test->error_message))
+                                            <pre class="m-0 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-gray-800">{{ $test->error_message }}</pre>
+                                        @else
+                                            —
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\GradeSubmissionJob;
 use App\Models\Process;
+use App\Models\ProcessTestGroup;
 use App\Models\Submission;
 use App\Services\AutoGradingRunner;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class SubmissionController extends Controller
         $student = $user->student;
 
         $submissions = $student
-            ? Submission::with(['process', 'submissionResult.testExecutions'])
+            ? Submission::with(['process', 'processTestGroup', 'submissionResult.testExecutions'])
                 ->where('student_id', $user->id)
                 ->latest()
                 ->get()
@@ -29,7 +30,12 @@ class SubmissionController extends Controller
             $groupIds = $user->memberGroups->pluck('id');
             $processes = Process::whereHas('groups', function ($query) use ($groupIds) {
                 $query->whereIn('groups.id', $groupIds);
-            })->distinct()->get();
+            })
+                ->with(['processTestGroups' => fn ($q) => $q->orderBy('id')])
+                ->distinct()
+                ->get()
+                ->filter(fn ($p) => $p->processTestGroups->isNotEmpty())
+                ->values();
         }
 
         return view('submissions.index', [
@@ -52,11 +58,13 @@ class SubmissionController extends Controller
         }
 
         $request->validate([
-            'evaluation_process_id' => 'required|exists:processes,id',
+            'process_test_group_id' => 'required|exists:process_test_groups,id',
             'file' => 'required|file|mimes:zip|max:512000',
         ]);
 
-        $process = Process::findOrFail($request->input('evaluation_process_id'));
+        $group = ProcessTestGroup::with('process.groups.users')->findOrFail($request->input('process_test_group_id'));
+        $process = $group->process;
+
         $allowed = $process->groups()
             ->whereHas('users', function ($q) use ($user) {
                 $q->where('users.id', $user->id);
@@ -65,23 +73,26 @@ class SubmissionController extends Controller
 
         if (! $allowed) {
             return back()->withErrors([
-                'evaluation_process_id' => 'You are not allowed to submit to this process.',
+                'process_test_group_id' => 'You are not allowed to submit to this process.',
             ]);
         }
 
         $file = $request->file('file');
-        $path = $file->store('submissions');
 
         $submission = Submission::create([
             'evaluation_process_id' => $process->id,
+            'process_test_group_id' => $group->id,
             'student_id' => $user->id,
-            'zip_file_path' => $path,
+            'zip_file_path' => null,
             'status' => 'pending',
             'submission_date' => now(),
         ]);
 
+        $path = $file->storeAs('autograding/submission-'.$submission->id, 'submission.zip');
+        $submission->update(['zip_file_path' => $path]);
+
         if (config('queue.default') === 'sync') {
-            $runner->grade($submission);
+            $runner->grade($submission->fresh(['process', 'processTestGroup']));
         } elseif (config('queue.default') === 'database') {
             GradeSubmissionJob::dispatchSync($submission->id);
         } else {
@@ -95,72 +106,24 @@ class SubmissionController extends Controller
 
     public function show(Submission $submission)
     {
-        $submission->load('process', 'student', 'submissionResult.testExecutions');
+        $submission->load('process', 'student', 'processTestGroup', 'submissionResult.testExecutions');
 
-        return view('submissions.show', [
-            'submission' => $submission,
-        ]);
+        return view('submissions.show', compact('submission'));
     }
 
-    public function apiIndex()
+    public function teacherIndex()
     {
-        $submissions = Submission::with('process', 'student', 'submissionResult.testExecutions')->get();
-        return response()->json($submissions);
-    }
-
-    public function apiStore(Request $request)
-    {
-        $validated = $request->validate([
-            'evaluation_process_id' => 'required|exists:processes,id',
-            'student_id' => 'required|exists:users,id',
-            'zip_file_path' => 'nullable|string',
-            'status' => 'nullable|string',
-            'submission_date' => 'nullable|date',
-        ]);
-
-        $submission = Submission::create($validated);
-        return response()->json($submission, 201);
-    }
-
-    public function apiShow(Submission $submission)
-    {
-        $submission->load('process', 'student', 'submissionResult.testExecutions');
-        return response()->json($submission);
-    }
-
-    public function apiUpdate(Request $request, Submission $submission)
-    {
-        $validated = $request->validate([
-            'evaluation_process_id' => 'sometimes|exists:processes,id',
-            'student_id' => 'sometimes|exists:users,id',
-            'zip_file_path' => 'nullable|string',
-            'status' => 'nullable|string',
-            'submission_date' => 'nullable|date',
-        ]);
-
-        $submission->update($validated);
-        return response()->json($submission);
-    }
-
-    public function apiDestroy(Submission $submission)
-    {
-        $submission->delete();
-        return response()->json(null, 204);
-    }
-
-    public function getByProcess($processId)
-    {
-        $submissions = Submission::where('evaluation_process_id', $processId)
-            ->with('process', 'student', 'submissionResult')
+        $submissions = Submission::with(['process', 'processTestGroup', 'student', 'submissionResult.testExecutions'])
+            ->latest()
             ->get();
-        return response()->json($submissions);
+
+        return view('submissions.teacher-index', compact('submissions'));
     }
 
-    public function getByStudent($studentId)
+    public function teacherShow(Submission $submission)
     {
-        $submissions = Submission::where('student_id', $studentId)
-            ->with('process', 'student', 'submissionResult')
-            ->get();
-        return response()->json($submissions);
+        $submission->load(['process', 'student', 'processTestGroup', 'submissionResult.testExecutions']);
+
+        return view('submissions.show', compact('submission'));
     }
 }

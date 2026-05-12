@@ -8,6 +8,7 @@ use App\Models\TestExecution;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use JsonException;
 use Symfony\Component\Process\Process as SymfonyProcess;
 
 class AutoGradingRunner
@@ -27,6 +28,26 @@ class AutoGradingRunner
             $submission->update([
                 'status' => 'failed',
             ]);
+
+            return;
+        }
+
+        $submission->loadMissing(['process', 'processTestGroup']);
+
+        if (! $submission->process_test_group_id || ! $submission->processTestGroup) {
+            SubmissionResult::updateOrCreate(
+                ['submissions_id' => $submission->id],
+                [
+                    'final_grade' => null,
+                    'report_sent' => json_encode([
+                        'error' => 'Submissão sem grupo de testes (process_test_group_id). Volte a submeter escolhendo um grupo.',
+                    ], JSON_THROW_ON_ERROR),
+                    'notified_student' => false,
+                    'notified_teacher' => false,
+                    'created_at' => now(),
+                ]
+            );
+            $submission->update(['status' => 'failed']);
 
             return;
         }
@@ -69,9 +90,66 @@ class AutoGradingRunner
             @unlink($resultPath);
         }
 
+        $group = $submission->processTestGroup;
+        $process = $submission->process;
+        $rawPattern = trim((string) $group->path_pattern);
+        $segments = $rawPattern !== ''
+            ? preg_split('/[\s,]+/', $rawPattern, -1, PREG_SPLIT_NO_EMPTY)
+            : [];
+        $testPaths = array_values(array_filter(array_map(
+            fn (string $p) => trim(str_replace('\\', '/', $p), '/'),
+            $segments
+        )));
+        if ($testPaths === []) {
+            $testPaths = ['tests/tests'];
+        }
+
+        $processConfigPath = $workDir.DIRECTORY_SEPARATOR.'process-config.json';
+        $configPayload = [
+            'version' => 1,
+            'group' => [
+                'id' => $group->id,
+                'name' => $group->name,
+                'path_pattern' => $group->path_pattern,
+            ],
+            'results_visibility' => data_get($process?->config, 'results_visibility', 'student'),
+            'results_criteria' => data_get($process?->config, 'results_criteria', 'final_grade'),
+            'test_paths' => $testPaths,
+            'weights' => [
+                'process_percent' => config('autograding.process_weight_percent'),
+            ],
+            'visibility' => $group->visibility,
+        ];
+
+        try {
+            File::put(
+                $processConfigPath,
+                json_encode($configPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)
+            );
+        } catch (JsonException $e) {
+            SubmissionResult::updateOrCreate(
+                ['submissions_id' => $submission->id],
+                [
+                    'final_grade' => null,
+                    'report_sent' => json_encode([
+                        'error' => 'Falha ao gravar process-config.json',
+                        'detail' => $e->getMessage(),
+                    ], JSON_THROW_ON_ERROR),
+                    'notified_student' => false,
+                    'notified_teacher' => false,
+                    'created_at' => now(),
+                ]
+            );
+            $submission->update(['status' => 'failed']);
+
+            return;
+        }
+
         $componentsPath = $workDir.DIRECTORY_SEPARATOR.'components.json';
         $components = ['app', 'routes', 'resources'];
         File::put($componentsPath, json_encode(array_values($components), JSON_THROW_ON_ERROR));
+
+        $archivedZip = $workDir.DIRECTORY_SEPARATOR.'submission.zip';
 
         $command = [
             config('autograding.python_binary'),
@@ -80,8 +158,14 @@ class AutoGradingRunner
             $studentName,
             '--result-json',
             $resultPath,
+            '--storage-work-dir',
+            $workDir,
+            '--archive-submitted-zip',
+            $archivedZip,
             '--components-json',
             $componentsPath,
+            '--process-config',
+            $processConfigPath,
         ];
 
         $proc = new SymfonyProcess($command, $root, null, null, (float) config('autograding.timeout'));
@@ -110,6 +194,7 @@ class AutoGradingRunner
             );
 
             $submission->update(['status' => 'failed']);
+
             return;
         }
 
@@ -128,6 +213,7 @@ class AutoGradingRunner
             );
 
             $submission->update(['status' => 'failed']);
+
             return;
         }
 

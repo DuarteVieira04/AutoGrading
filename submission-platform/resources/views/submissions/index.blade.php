@@ -25,17 +25,24 @@
                 </div>
 
                 <div>
-                    <label for="evaluation_process" class="block text-sm font-medium text-gray-800">{{ __('Processo de correção') }}</label>
-                    <select id="evaluation_process" name="evaluation_process_id"
+                    <label for="process_test_group_id" class="block text-sm font-medium text-gray-800">{{ __('Grupo de testes / processo') }}</label>
+                    <select id="process_test_group_id" name="process_test_group_id" required
                             class="mt-2 block w-full text-sm text-gray-800 border-gray-300 rounded-md">
-                        <option value="">{{ __('Selecione um processo de correção') }}</option>
+                        <option value="">{{ __('Selecione um grupo de testes') }}</option>
                         @foreach ($processes as $process)
-                            <option value="{{ $process->id }}">{{ $process->process_name }}</option>
+                            <optgroup label="{{ $process->process_name }}">
+                                @foreach ($process->processTestGroups as $tg)
+                                    <option value="{{ $tg->id }}">{{ $tg->name }} — {{ $tg->path_pattern }}</option>
+                                @endforeach
+                            </optgroup>
                         @endforeach
                     </select>
-                    @error('evaluation_process_id')
+                    @error('process_test_group_id')
                         <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                     @enderror
+                    @if ($processes->isEmpty())
+                        <p class="mt-2 text-sm text-gray-600">{{ __('Não há processos com grupos de testes disponíveis para a sua turma.') }}</p>
+                    @endif
                 </div>
 
                 <div>
@@ -57,6 +64,7 @@
                         <thead class="bg-gray-100 text-gray-800">
                             <tr>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Processo') }}</th>
+                                <th scope="col" class="px-4 py-2 font-medium">{{ __('Grupo') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Data') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Ficheiro armazenado') }}</th>
                                 <th scope="col" class="px-4 py-2 font-medium">{{ __('Estado') }}</th>
@@ -91,6 +99,7 @@
                                 @endphp
                                 <tr>
                                     <td class="px-4 py-2 text-gray-800">{{ $row->process->process_name ?? '—' }}</td>
+                                    <td class="px-4 py-2 text-gray-800">{{ $row->processTestGroup->name ?? '—' }}</td>
                                     <td class="whitespace-nowrap px-4 py-2 text-gray-800">{{ $row->created_at->format('Y-m-d H:i') }}</td>
                                     <td class="px-4 py-2 text-gray-800">{{ basename($row->zip_file_path) }}</td>
                                     <td class="px-4 py-2 text-gray-800">{{ ucfirst($row->status) }}</td>

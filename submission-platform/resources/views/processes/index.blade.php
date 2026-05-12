@@ -41,7 +41,11 @@
                             </th>
 
                             <th class="px-4 py-3 text-left font-medium text-gray-700">
-                                {{ __('Grupos') }}
+                                {{ __('Pasta de testes') }}
+                            </th>
+
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">
+                                {{ __('Turmas') }}
                             </th>
 
                             <th class="px-4 py-3 text-left font-medium text-gray-700">
@@ -76,7 +80,19 @@
                                     {{ $p->processType->name ?? '—' }}
                                 </td>
 
-                                {{-- GROUPS --}}
+                                {{-- TEST SUITES --}}
+                                <td class="px-4 py-3 text-xs text-gray-700 align-top max-w-xs">
+                                    @forelse ($p->processTestGroups as $tg)
+                                        <div class="mb-3 last:mb-0 border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                                            <span class="font-medium text-gray-900">{{ $tg->name }}</span>
+                                            <span class="block font-mono text-[11px] text-gray-500">{{ $tg->path_pattern }}</span>
+                                        </div>
+                                    @empty
+                                        <span class="text-gray-400 italic">{{ __('Nenhuma suite') }}</span>
+                                    @endforelse
+                                </td>
+
+                                {{-- CLASS GROUPS (turmas) --}}
                                 <td class="px-4 py-3 text-xs text-gray-700">
                                     @if ($p->groups->isNotEmpty())
                                         @foreach ($p->groups as $group)
@@ -138,7 +154,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                                <td colspan="8" class="px-4 py-8 text-center text-gray-500">
                                     {{ __('Nenhum processo. Crie um novo processo para começar.') }}
                                 </td>
                             </tr>

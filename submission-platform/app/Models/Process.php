@@ -16,9 +16,6 @@ class Process extends Model
         'open_date',
         'close_date',
         'execution_environment',
-        'results_visibility',
-        'results_criteria',
-        'weighting',
         'max_file_size_byte',
         'email_notification',
         'config',
@@ -56,4 +53,11 @@ class Process extends Model
         return $this->belongsToMany(Group::class, 'process_groups', 'process_id', 'group_id');
     }
 
+    /**
+     * Grupos de testes (pastas / suites) e respetiva configuração para este processo.
+     */
+    public function processTestGroups()
+    {
+        return $this->hasMany(ProcessTestGroup::class)->orderBy('id');
+    }
 }

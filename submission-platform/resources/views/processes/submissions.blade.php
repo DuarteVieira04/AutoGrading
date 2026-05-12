@@ -32,6 +32,7 @@
                             <thead class="bg-gray-50 text-gray-700">
                                 <tr>
                                     <th class="px-4 py-3 text-left font-medium">{{ __('Estudante') }}</th>
+                                    <th class="px-4 py-3 text-left font-medium">{{ __('Grupo de testes') }}</th>
                                     <th class="px-4 py-3 text-left font-medium">{{ __('Submetido em') }}</th>
                                     <th class="px-4 py-3 text-left font-medium">{{ __('Ficheiro') }}</th>
                                     <th class="px-4 py-3 text-left font-medium">{{ __('Estado') }}</th>
@@ -48,6 +49,7 @@
                                     @endphp
                                     <tr>
                                         <td class="px-4 py-3 text-gray-800">{{ $submission->student->name ?? __('Anónimo') }}</td>
+                                        <td class="px-4 py-3 text-gray-800">{{ $submission->processTestGroup->name ?? '—' }}</td>
                                         <td class="px-4 py-3 text-gray-800">{{ $submission->submission_date?->format('d/m/Y H:i') ?? $submission->created_at->format('d/m/Y H:i') }}</td>
                                         <td class="px-4 py-3 text-gray-800">{{ basename($submission->zip_file_path) }}</td>
                                         <td class="px-4 py-3 text-gray-800">{{ ucfirst($submission->status) }}</td>

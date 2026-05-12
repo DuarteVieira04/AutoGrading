@@ -11,6 +11,7 @@ class Submission extends Model
 
     protected $fillable = [
         'evaluation_process_id',
+        'process_test_group_id',
         'student_id',
         'zip_file_path',
         'status',
@@ -24,6 +25,11 @@ class Submission extends Model
     public function process()
     {
         return $this->belongsTo(Process::class, 'evaluation_process_id');
+    }
+
+    public function processTestGroup()
+    {
+        return $this->belongsTo(ProcessTestGroup::class, 'process_test_group_id');
     }
 
     public function student()

@@ -7,6 +7,7 @@ import argparse
 import shutil
 import subprocess
 import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -30,6 +31,9 @@ class AutoGrading:
         *,
         result_json_path: Optional[str] = None,
         components_json_path: Optional[str] = None,
+        storage_work_dir: Optional[str] = None,
+        archive_submitted_zip_path: Optional[str] = None,
+        process_config_path: Optional[str] = None,
     ):
         self.zip_file = Path(zip_file)
         self.student_name = student_name
@@ -37,6 +41,21 @@ class AutoGrading:
         self.working_project = None
         self.results = {}
         self.result_json_path = Path(result_json_path) if result_json_path else None
+        self.storage_work_dir = (
+            Path(storage_work_dir).expanduser().resolve() if storage_work_dir else None
+        )
+        self.archive_submitted_zip_path = (
+            Path(archive_submitted_zip_path).expanduser().resolve()
+            if archive_submitted_zip_path
+            else None
+        )
+        self.process_config_path = (
+            Path(process_config_path).expanduser().resolve()
+            if process_config_path
+            else None
+        )
+        self.process_config: Dict = {}
+        self.junit_report_file: Optional[Path] = None
 
         if components_json_path:
             with open(components_json_path, "r", encoding="utf-8") as cf:
@@ -49,7 +68,89 @@ class AutoGrading:
         else:
             self.components_to_replace = list(self.DEFAULT_COMPONENTS)
 
+        if self.process_config_path:
+            if self.process_config_path.is_file():
+                with open(self.process_config_path, "r", encoding="utf-8") as pf:
+                    loaded = json.load(pf)
+                self.process_config = loaded if isinstance(loaded, dict) else {}
+            else:
+                self._log(
+                    f"WARNING: --process-config não encontrado: {self.process_config_path}"
+                )
+
         self._ensure_paths_exist()
+
+    def _php_binary(self) -> str:
+        exe = (os.environ.get("AUTOGRADING_PHP_BINARY") or "").strip()
+        return exe if exe else (shutil.which("php") or "php")
+
+    def _report_base_dir(self) -> Path:
+        if self.storage_work_dir:
+            return self.storage_work_dir
+        if self.result_json_path:
+            return self.result_json_path.resolve().parent
+        return self.RESULTS_DIR
+
+    def _junit_report_dest_path(self) -> Path:
+        return self._report_base_dir() / "report.xml"
+
+    def _junit_local_path(self) -> Path:
+        return (self.working_project / "junit_autograding.xml").resolve()
+
+    def _archive_submitted_zip(self) -> None:
+        if not self.archive_submitted_zip_path:
+            return
+        dest = self.archive_submitted_zip_path
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if self.zip_file.resolve() == dest.resolve():
+                self._log(f"OK: ZIP já em {dest}")
+                return
+            shutil.copy2(self.zip_file, dest)
+            self._log(f"OK: ZIP guardado em {dest}")
+        except OSError as e:
+            self._log(f"WARNING: cópia do ZIP falhou: {e}")
+
+    def _ensure_vendor(self) -> bool:
+        if not self.working_project:
+            return False
+        autoload = self.working_project / "vendor" / "autoload.php"
+        if autoload.is_file():
+            return True
+        composer = shutil.which("composer")
+        if not composer:
+            self._log("ERROR: vendor/ em falta e Composer não está no PATH")
+            return False
+        php = self._php_binary()
+        self._log("vendor/ ausente; a executar composer install…")
+        r = subprocess.run(
+            [php, composer, "install", "--no-interaction", "--prefer-dist"],
+            cwd=self.working_project,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        if r.returncode != 0:
+            self._log(f"ERROR: composer install falhou:\n{(r.stderr or r.stdout)[-3000:]}")
+            return False
+        return autoload.is_file()
+
+    @staticmethod
+    def _xml_tag(el: ET.Element) -> str:
+        t = el.tag
+        return t.split("}", 1)[-1] if t.startswith("{") else t
+
+    def _finalize_report_xml(self, local_xml: Path, dest_xml: Path) -> None:
+        dest_xml.parent.mkdir(parents=True, exist_ok=True)
+        if local_xml.is_file():
+            try:
+                shutil.copy2(local_xml, dest_xml)
+                self.junit_report_file = dest_xml.resolve()
+                self._log(f"OK: Relatório JUnit em {dest_xml}")
+            except OSError as e:
+                self._log(f"WARNING: cópia report.xml falhou: {e}")
+        else:
+            self._log("WARNING: PHPUnit não gerou junit_autograding.xml")
 
     def _ensure_paths_exist(self):
         self.TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -199,63 +300,218 @@ class AutoGrading:
             return False
             
 
-    def _run_tests(self) -> Optional[str]:
+    def _run_tests(self) -> Tuple[Optional[str], Path]:
         self._log("\n=== Run Tests ===")
 
-        try:
-            if not (self.working_project / "composer.json").exists():
-                self._log("ERROR: composer.json not found")
-                return None
+        dest_report = self._junit_report_dest_path()
 
-            self._log("Running: php artisan test --json")
+        try:
+            if not self.working_project or not (self.working_project / "composer.json").exists():
+                self._log("ERROR: composer.json not found")
+                return None, dest_report
+
+            if not self._ensure_vendor():
+                return None, dest_report
+
+            local_xml = self._junit_local_path()
+            if local_xml.exists():
+                local_xml.unlink()
+
+            php = self._php_binary()
+            junit_arg = str(local_xml.resolve())
+            phpunit_bin = self.working_project / "vendor" / "bin" / "phpunit"
+
+            path_args: List[str] = []
+            platform_mode = self.storage_work_dir is not None
+            tp = (
+                self.process_config.get("test_paths")
+                if isinstance(self.process_config, dict)
+                else None
+            )
+            if isinstance(tp, list) and tp:
+                for p in tp:
+                    rel = str(p).strip().strip("/\\")
+                    if not rel:
+                        continue
+                    full = (self.working_project / rel).resolve()
+                    if not full.exists():
+                        self._log(
+                            f"WARNING: pasta de testes inexistente no projeto: {full}"
+                        )
+                    path_args.append(str(full))
+
+            if platform_mode and not path_args:
+                self._log(
+                    "ERROR: process-config sem test_paths válidos (correção na plataforma)."
+                )
+                return None, dest_report
+
+            if phpunit_bin.is_file():
+                cmd = [php, str(phpunit_bin), "--log-junit", junit_arg]
+                cmd.extend(path_args)
+                scope = " ".join(path_args) if path_args else "(suite default phpunit.xml)"
+                self._log(f"Running: phpunit --log-junit … {scope}")
+            else:
+                cmd = [php, "artisan", "test"]
+                cmd.extend(path_args)
+                cmd.extend(["--log-junit", junit_arg])
+                scope = " ".join(path_args) if path_args else "(suite default)"
+                self._log(f"Running: artisan test … {scope}")
+            self._log(f"Relatório final (storage): {dest_report}")
 
             result = subprocess.run(
-                ["php", "artisan", "test", "--json"],
+                cmd,
                 cwd=self.working_project,
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
             )
 
             if result.returncode != 0 and result.returncode != 1:
                 self._log(f"WARNING: Command returned code: {result.returncode}")
-                if result.stderr:
-                    self._log(f"ERROR STDOUT: {result.stdout.strip()}")
-                    self._log(f"ERROR STDERR: {result.stderr.strip()}")
-                else:
-                    self._log("ERROR: No stderr from command, inspect Laravel logs or artisan output.")
 
-            output = result.stdout or result.stderr
+            parts = []
+            if result.stdout:
+                parts.append(result.stdout)
+            if result.stderr:
+                parts.append(result.stderr)
+            output = "\n".join(parts)
             if not output.strip():
                 self._log("ERROR: No output from test command")
-                return None
 
-            self._log("OK: Tests executed, output captured")
+            self._finalize_report_xml(local_xml, dest_report)
 
-            return output
+            if output.strip():
+                self._log("OK: Tests executed, output captured")
+
+            return output if output.strip() else None, dest_report
 
         except subprocess.TimeoutExpired:
             self._log("ERROR: Timeout while running tests (>300s)")
-            return None
+            return None, dest_report
         except FileNotFoundError:
-            self._log("ERROR: PHP not found. Install with: sudo apt-get install php8.1 php8.1-cli")
-            return None
+            self._log("ERROR: PHP não encontrado (defina AUTOGRADING_PHP_BINARY se necessário)")
+            return None, dest_report
         except Exception as e:
             self._log(f"ERROR: Failed to run tests: {e}")
+            return None, dest_report
+
+    def _merge_suite_autograding_json(self) -> None:
+        """Mescla autograding.json de cada pasta em test_paths para process_config.suite_configs."""
+        if not self.working_project:
+            return
+        if not isinstance(self.process_config, dict):
+            self.process_config = {}
+        tp = self.process_config.get("test_paths")
+        if not isinstance(tp, list) or not tp:
+            return
+        suites: Dict[str, Dict] = {}
+        for raw in tp:
+            rel = str(raw).strip().strip("/\\")
+            if not rel:
+                continue
+            cfg_path = (self.working_project / rel / "autograding.json").resolve()
+            if cfg_path.is_file():
+                try:
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, dict):
+                        suites[rel] = data
+                        self._log(f"OK: autograding.json carregado: {cfg_path}")
+                except (OSError, json.JSONDecodeError) as e:
+                    self._log(f"WARNING: autograding.json inválido em {cfg_path}: {e}")
+            else:
+                self._log(f"INFO: sem autograding.json em {cfg_path}")
+        if suites:
+            self.process_config["suite_configs"] = suites
+
+    def _parse_junit_xml_results(self, junit_path: Path) -> Optional[Dict]:
+        if not junit_path.is_file():
+            return None
+        try:
+            tree = ET.parse(junit_path)
+            root = tree.getroot()
+        except (ET.ParseError, OSError):
             return None
 
-    def _parse_results(self, test_output: str) -> Dict:
+        tests: List[Dict] = []
+        passed = failed = errors = skipped = 0
+        duration = 0.0
+
+        for el in root.iter():
+            if self._xml_tag(el) != "testcase":
+                continue
+            try:
+                duration += float(el.get("time") or 0)
+            except (TypeError, ValueError):
+                pass
+            name = el.get("name") or ""
+            classname = el.get("classname") or el.get("class") or ""
+            disp = f"{classname}::{name}" if classname else name
+
+            fail_nodes = [
+                c for c in el
+                if self._xml_tag(c) in ("failure", "error", "skipped")
+            ]
+            msg = ""
+            status = "passed"
+            if not fail_nodes:
+                passed += 1
+            else:
+                c0 = fail_nodes[0]
+                tag = self._xml_tag(c0)
+                if tag == "skipped":
+                    status = "skipped"
+                    skipped += 1
+                elif tag == "error":
+                    status = "failed"
+                    errors += 1
+                else:
+                    status = "failed"
+                    failed += 1
+                msg = (c0.get("message") or "").strip()
+                body = (c0.text or "").strip()
+                if body:
+                    msg = f"{msg}\n{body}".strip() if msg else body
+
+            tests.append({"name": disp, "status": status, "message": msg})
+
+        total = len(tests)
+        summary = {
+            "total_tests": total,
+            "successful": passed,
+            "failed": failed,
+            "errors": errors,
+            "skipped": skipped,
+            "duration": duration,
+            "success_rate": (passed / total * 100) if total > 0 else 0.0,
+        }
+
+        return {
+            "type": "junit",
+            "summary": summary,
+            "tests": tests,
+        }
+
+    def _parse_results(self, test_output: str, junit_fallback: Optional[Path] = None) -> Dict:
         self._log("\n=== Parse Results ===")
 
+        text = (test_output or "").strip()
         try:
-            data = json.loads(test_output)
+            data = json.loads(text)
             self._log("OK: JSON output parsed successfully")
-
             return self._analyze_results(data)
-
         except json.JSONDecodeError:
-            self._log("WARNING: Output is not valid JSON, trying text parsing...")
-            return self._parse_text_output(test_output)
+            pass
+
+        if junit_fallback:
+            ju = self._parse_junit_xml_results(junit_fallback)
+            if ju is not None:
+                self._log("OK: Summary derived from JUnit XML")
+                return ju
+
+        self._log("WARNING: Output is not valid JSON, trying text parsing...")
+        return self._parse_text_output(test_output or "")
 
     def _analyze_results(self, data: Dict) -> Dict:
         results = {
@@ -281,11 +537,17 @@ class AutoGrading:
 
         if "tests" in data:
             for test_name, test_data in data["tests"].items():
-                results["tests"].append({
+                row = {
                     "name": test_name,
                     "status": test_data.get("status", "unknown"),
                     "message": test_data.get("message", ""),
-                })
+                }
+                for fk in ("file", "filepath", "path"):
+                    v = test_data.get(fk)
+                    if isinstance(v, str) and v.strip():
+                        row["file"] = v.strip().replace("\\", "/")
+                        break
+                results["tests"].append(row)
 
         return results
 
@@ -420,6 +682,13 @@ class AutoGrading:
             "working_project_path": str(self.working_project),
             "components_replaced": self.components_to_replace,
         }
+        if self.process_config:
+            result_data["autograding_process_config"] = self.process_config
+        jr = self.junit_report_file if self.junit_report_file else self._junit_report_dest_path()
+        if Path(jr).is_file():
+            rp = str(jr.resolve())
+            result_data["report_xml_path"] = rp
+            result_data["junit_report_path"] = rp
 
         with open(result_file, 'w', encoding='utf-8') as f:
             json.dump(result_data, f, indent=2)
@@ -446,6 +715,8 @@ class AutoGrading:
         if not self._validate_zip() or not self._validate_base_project():
             return False
 
+        self._archive_submitted_zip()
+
         extract_path = self._extract_zip()
         if not extract_path:
             return False
@@ -456,12 +727,15 @@ class AutoGrading:
         if not self._replace_components():
             return False
 
-        test_output = self._run_tests()
-        if not test_output:
+        self._merge_suite_autograding_json()
+
+        test_output, _ = self._run_tests()
+        local_junit = self._junit_local_path()
+        if not (test_output or "").strip() and not local_junit.is_file():
             self._log("WARNING: No test output received")
             return False
 
-        results = self._parse_results(test_output)
+        results = self._parse_results(test_output or "", junit_fallback=local_junit)
 
         self._display_results(results)
 
@@ -533,6 +807,24 @@ def main():
         default=None,
         help='JSON array, ex.: ["app","routes","resources"] — pastas a substituir no projeto de teste',
     )
+    parser.add_argument(
+        "--storage-work-dir",
+        dest="storage_work_dir",
+        default=None,
+        help="Pasta absoluta do Laravel para report.xml e result.json (ex.: .../autograding/submission-N)",
+    )
+    parser.add_argument(
+        "--archive-submitted-zip",
+        dest="archive_submitted_zip",
+        default=None,
+        help="Caminho absoluto para gravar cópia do ZIP (ex.: .../submission-N/submission.zip)",
+    )
+    parser.add_argument(
+        "--process-config",
+        dest="process_config",
+        default=None,
+        help="JSON com test_paths, visibility e pesos (gravado pelo Laravel em cada submissão)",
+    )
     args = parser.parse_args()
 
     exe = AutoGrading(
@@ -540,6 +832,9 @@ def main():
         args.student_name,
         result_json_path=args.result_json,
         components_json_path=args.components_json,
+        storage_work_dir=args.storage_work_dir,
+        archive_submitted_zip_path=args.archive_submitted_zip,
+        process_config_path=args.process_config,
     )
     success = exe.run()
 
