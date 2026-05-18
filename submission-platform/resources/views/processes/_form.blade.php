@@ -143,7 +143,7 @@
     </div>
 
     <div class="mt-8 border-t border-gray-200 pt-6">
-        <h3 class="text-sm font-semibold text-gray-900">{{ __('Grupos de testes (pastas / suites)') }}</h3>
+        <h3 class="text-sm font-semibold text-gray-900">{{ __('Grupos de testes (pastas)') }}</h3>
         <p class="mt-1 text-xs text-gray-500">{{ __('Cada grupo associa um nome a uma pasta no projeto base (ex.: tests/tests1). O ficheiro autograding.json nessa pasta é usado na correção automática; não é editável aqui.') }}</p>
 
         <div class="mt-4 space-y-4">

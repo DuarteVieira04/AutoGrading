@@ -1,4 +1,4 @@
-<?php
+S<?php
 
 namespace App\Models;
 
@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Grupo de testes associado a um Process (pasta/suite).
+ * Grupo de testes associado a um Process (pasta de testes no projeto base).
  *
  * @property array|null $visibility Regras de visibilidade deste grupo no relatório (opcional).
  */

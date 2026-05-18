@@ -96,6 +96,9 @@
                                     $failedCount = $hasTests ? $totalTests - $passedCount : ($summary['failed'] ?? null);
                                     $hasSummary = $hasTests || ! empty($summary);
                                     $passed = $hasSummary && $failedCount === 0 && $row->status === 'graded';
+
+                                    $suiteVis = \App\Support\SuiteAutograding::effectiveVisibilityFromSubmission($row);
+                                    $canViewRowResults = \App\Support\SuiteAutograding::mayViewGradingDetails($suiteVis, true, false);
                                 @endphp
                                 <tr>
                                     <td class="px-4 py-2 text-gray-800">{{ $row->process->process_name ?? '—' }}</td>
@@ -104,7 +107,9 @@
                                     <td class="px-4 py-2 text-gray-800">{{ basename($row->zip_file_path) }}</td>
                                     <td class="px-4 py-2 text-gray-800">{{ ucfirst($row->status) }}</td>
                                     <td class="px-4 py-2 text-gray-800">
-                                        @if ($result && $result->final_grade !== null)
+                                        @if (! $canViewRowResults)
+                                            —
+                                        @elseif ($result && $result->final_grade !== null)
                                             {{ number_format((float) $result->final_grade, 1) }}%
                                         @elseif ($result && $result->report_sent)
                                             {{ __('A aguardar classificação estruturada') }}
@@ -115,6 +120,8 @@
                                     <td class="px-4 py-2 text-gray-800 align-top max-w-md">
                                         @if ($row->status === 'processing' || $row->status === 'pending')
                                             <span class="text-gray-500">{{ __('A aguardar correção automática…') }}</span>
+                                        @elseif (! $canViewRowResults)
+                                            <span class="text-sm text-gray-600">{{ __('Resultados visíveis apenas para o docente.') }}</span>
                                         @elseif ($hasSummary)
                                             <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
                                                 {{ $passed ? __('Aprovado') : __('Reprovado') }}
@@ -127,8 +134,12 @@
                                         @elseif ($result && $result->report_sent)
                                             <div class="space-y-2">
                                                 <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">{{ __('Resultado pronto') }}</span>
-                                                <p class="mt-1 text-sm text-gray-600">{{ __('Foi produzida saída de correção, mas não há resumo detalhado de testes disponível.') }}</p>
-                                                <p class="mt-1 text-sm text-gray-700 break-words">{{ Str::limit($result->report_sent, 140) }}</p>
+                                                @if ($canViewRowResults)
+                                                    <p class="mt-1 text-sm text-gray-600">{{ __('Foi produzida saída de correção, mas não há resumo detalhado de testes disponível.') }}</p>
+                                                    <p class="mt-1 text-sm text-gray-700 break-words">{{ Str::limit($result->report_sent, 140) }}</p>
+                                                @else
+                                                    <p class="mt-1 text-sm text-gray-600">{{ __('Resultados visíveis apenas para o docente.') }}</p>
+                                                @endif
                                             </div>
                                         @else
                                             <span class="text-gray-500">—</span>

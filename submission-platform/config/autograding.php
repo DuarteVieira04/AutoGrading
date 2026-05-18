@@ -28,7 +28,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Percentagem ou fração na avaliação da disciplina, se usares esse modelo.
-    | Pesos por suite ficam em cada autograding.json na pasta de testes.
+    | Pesos por pasta de testes ficam em cada autograding.json na pasta de testes.
     |
     */
     'process_weight_percent' => env('AUTOGRADING_PROCESS_WEIGHT_PERCENT') !== null

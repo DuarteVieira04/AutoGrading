@@ -7,6 +7,7 @@ use App\Models\Process;
 use App\Models\ProcessTestGroup;
 use App\Models\Submission;
 use App\Services\AutoGradingRunner;
+use App\Support\SuiteAutograding;
 use Illuminate\Http\Request;
 
 class SubmissionController extends Controller
@@ -106,9 +107,22 @@ class SubmissionController extends Controller
 
     public function show(Submission $submission)
     {
-        $submission->load('process', 'student', 'processTestGroup', 'submissionResult.testExecutions');
+        $user = auth()->user();
+        $submission->load(['process', 'student', 'processTestGroup', 'submissionResult.testExecutions']);
 
-        return view('submissions.show', compact('submission'));
+        $owns = (int) $user->id === (int) $submission->student_id;
+        $isProcessTeacher = $user->hasRole('teacher')
+            && $submission->process
+            && (int) $submission->process->teacher_id === (int) $user->id;
+
+        if (! $owns && ! $isProcessTeacher) {
+            abort(403);
+        }
+
+        $suiteVisibility = SuiteAutograding::effectiveVisibilityFromSubmission($submission);
+        $canViewGradingDetails = SuiteAutograding::mayViewGradingDetails($suiteVisibility, $owns, $isProcessTeacher);
+
+        return view('submissions.show', compact('submission', 'canViewGradingDetails', 'suiteVisibility'));
     }
 
     public function teacherIndex()
@@ -122,8 +136,6 @@ class SubmissionController extends Controller
 
     public function teacherShow(Submission $submission)
     {
-        $submission->load(['process', 'student', 'processTestGroup', 'submissionResult.testExecutions']);
-
-        return view('submissions.show', compact('submission'));
+        return $this->show($submission);
     }
 }

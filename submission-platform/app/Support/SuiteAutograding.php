@@ -74,4 +74,68 @@ final class SuiteAutograding
 
         return $out;
     }
+
+    /**
+     * Visibilidade efetiva da pasta de testes (autograding.json), a partir do resultado da correção ou do template em base-project.
+     *
+     * @param  array<string, mixed>  $reportPayload  Payload JSON guardado em submission_results.report_sent
+     */
+    public static function effectiveVisibility(?string $pathPattern, array $reportPayload): string
+    {
+        $suiteCfgs = data_get($reportPayload, 'autograding_process_config.suite_configs', []);
+        $segments = $pathPattern !== null && trim((string) $pathPattern) !== ''
+            ? preg_split('/[\s,]+/', trim((string) $pathPattern), -1, PREG_SPLIT_NO_EMPTY)
+            : [];
+
+        foreach ($segments as $seg) {
+            $seg = trim(str_replace('\\', '/', (string) $seg), '/');
+            if ($seg === '') {
+                continue;
+            }
+            if (isset($suiteCfgs[$seg]) && is_array($suiteCfgs[$seg])) {
+                $n = self::normalize($suiteCfgs[$seg]);
+                if (! empty($n['visibility'])) {
+                    return $n['visibility'];
+                }
+            }
+        }
+
+        foreach ($segments as $seg) {
+            $s = trim(str_replace('\\', '/', (string) $seg), '/');
+            if ($s === '') {
+                continue;
+            }
+            $read = self::read($s);
+            if (! empty($read['visibility'])) {
+                return $read['visibility'];
+            }
+            break;
+        }
+
+        return 'both';
+    }
+
+    public static function effectiveVisibilityFromSubmission(\App\Models\Submission $submission): string
+    {
+        $submission->loadMissing(['processTestGroup', 'submissionResult']);
+        $payload = $submission->submissionResult?->report_sent_payload;
+
+        return self::effectiveVisibility(
+            $submission->processTestGroup?->path_pattern,
+            is_array($payload) ? $payload : []
+        );
+    }
+
+    /**
+     * @param  string  $visibility  student|teacher|both
+     */
+    public static function mayViewGradingDetails(string $visibility, bool $viewerOwnsSubmission, bool $viewerIsProcessTeacher): bool
+    {
+        return match ($visibility) {
+            'student' => $viewerOwnsSubmission && ! $viewerIsProcessTeacher,
+            'teacher' => $viewerIsProcessTeacher,
+            'both' => $viewerOwnsSubmission || $viewerIsProcessTeacher,
+            default => $viewerOwnsSubmission || $viewerIsProcessTeacher,
+        };
+    }
 }

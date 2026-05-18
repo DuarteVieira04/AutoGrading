@@ -62,6 +62,21 @@
             $logsTests = $tests->filter(fn($test) => ! empty($test->execution_logs));
         @endphp
 
+        @if (! $canViewGradingDetails)
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                @switch($suiteVisibility)
+                    @case('teacher')
+                        <p>{{ __('Os resultados da correção automática desta pasta de testes estão visíveis apenas para o docente do processo.') }}</p>
+                        @break
+                    @case('student')
+                        <p>{{ __('Os resultados da correção automática desta pasta de testes estão visíveis apenas para o aluno submissor.') }}</p>
+                        @break
+                    @default
+                        <p>{{ __('Não tem acesso a estes resultados.') }}</p>
+                @endswitch
+            </div>
+        @endif
+
         <div class="grid gap-6 lg:grid-cols-2">
             <div class="space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
                 <div class="space-y-1">
@@ -106,7 +121,7 @@
                         $suiteDetail = \App\Support\SuiteAutograding::read($patShow);
                     }
                 @endphp
-                @if ($suiteDetail && array_filter($suiteDetail))
+                @if ($canViewGradingDetails && $suiteDetail && array_filter($suiteDetail))
                     @if (isset($suiteDetail['weight']))
                         <div class="space-y-1">
                             <p class="text-sm font-semibold text-gray-700">{{ __('Peso') }}</p>
@@ -146,7 +161,9 @@
                 <div class="space-y-1">
                     <p class="text-sm font-semibold text-gray-700">{{ __('Classificação') }}</p>
                     <p class="text-sm text-gray-900">
-                        @if ($result && $result->final_grade !== null)
+                        @if (! $canViewGradingDetails)
+                            —
+                        @elseif ($result && $result->final_grade !== null)
                             {{ number_format((float) $result->final_grade, 1) }}%
                         @else
                             —
@@ -159,7 +176,9 @@
                 <div class="space-y-1">
                     <p class="text-sm font-semibold text-gray-700">{{ __('Resumo da correção') }}</p>
 
-                    @if ($result && ! empty($result->report_sent) && ! $hasSummary)
+                    @if (! $canViewGradingDetails)
+                        <p class="text-sm text-gray-600">{{ __('Os detalhes da correção não são apresentados conforme a visibilidade definida em autograding.json para esta pasta de testes.') }}</p>
+                    @elseif ($result && ! empty($result->report_sent) && ! $hasSummary)
                         <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
                             <p class="font-semibold">{{ __('Resultado recebido') }}</p>
                             <p class="mt-1">{{ __('Não foram disponibilizados metadados de teste no resultado da correção.') }}</p>
@@ -196,7 +215,7 @@
                         </div>
                     @else
                         <p class="text-sm text-gray-600">{{ __('Não há informação estruturada de correção disponível para esta submissão.') }}</p>
-                        @if ($result && ! empty($result->report_sent))
+                        @if ($canViewGradingDetails && $result && ! empty($result->report_sent))
                             <p class="mt-3 text-sm text-gray-700 font-semibold">{{ __('Relatório bruto de correção') }}</p>
                             <p class="mt-1 text-sm text-gray-600">{{ \Illuminate\Support\Str::limit($result->report_sent, 300) }}</p>
                         @endif
@@ -207,7 +226,7 @@
             </div>
         </div>
 
-        @if (auth()->check() && auth()->user()->hasRole('teacher') && ($scriptOutputAvailable || $logsTests->isNotEmpty()))
+        @if ($canViewGradingDetails && auth()->check() && auth()->user()->hasRole('teacher') && ($scriptOutputAvailable || $logsTests->isNotEmpty()))
             <div class="space-y-4">
                 @if ($scriptOutputAvailable)
                     <div class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -283,7 +302,7 @@
             </div>
         @endif
 
-        @if ($hasSummary && $tests->isNotEmpty())
+        @if ($canViewGradingDetails && $hasSummary && $tests->isNotEmpty())
             <div class="space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-semibold text-gray-900">{{ __('Resultados dos testes') }}</h2>

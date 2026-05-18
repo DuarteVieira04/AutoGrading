@@ -54,7 +54,7 @@ class Process extends Model
     }
 
     /**
-     * Grupos de testes (pastas / suites) e respetiva configuração para este processo.
+     * Grupos de testes (pastas) e respetiva configuração para este processo.
      */
     public function processTestGroups()
     {

@@ -88,7 +88,7 @@
                                             <span class="block font-mono text-[11px] text-gray-500">{{ $tg->path_pattern }}</span>
                                         </div>
                                     @empty
-                                        <span class="text-gray-400 italic">{{ __('Nenhuma suite') }}</span>
+                                        <span class="text-gray-400 italic">{{ __('Nenhuma pasta de testes') }}</span>
                                     @endforelse
                                 </td>
 
