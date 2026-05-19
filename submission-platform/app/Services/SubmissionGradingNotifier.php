@@ -64,10 +64,15 @@ class SubmissionGradingNotifier
         try {
             Mail::to($to)->send(new SubmissionGradedMail($submission, 'student'));
             $result->update(['notified_student' => true]);
+            Log::info('Submission graded email sent to student', [
+                'submission_id' => $submission->id,
+                'to' => $to,
+            ]);
         } catch (\Throwable $e) {
             Log::error('Failed to send submission graded email to student', [
                 'submission_id' => $submission->id,
                 'to' => $to,
+                'mail_host' => config('mail.mailers.smtp.host'),
                 'error' => $e->getMessage(),
             ]);
         }
@@ -85,10 +90,15 @@ class SubmissionGradingNotifier
         try {
             Mail::to($to)->send(new SubmissionGradedMail($submission, 'teacher'));
             $result->update(['notified_teacher' => true]);
+            Log::info('Submission graded email sent to teacher', [
+                'submission_id' => $submission->id,
+                'to' => $to,
+            ]);
         } catch (\Throwable $e) {
             Log::error('Failed to send submission graded email to teacher', [
                 'submission_id' => $submission->id,
                 'to' => $to,
+                'mail_host' => config('mail.mailers.smtp.host'),
                 'error' => $e->getMessage(),
             ]);
         }

@@ -106,7 +106,7 @@ class SubmissionController extends Controller
         } else {
             $submission->update(['status' => 'processing']);
             GradeSubmissionJob::dispatch($submission->id)->afterCommit();
-            $flash = __('Submissão recebida e em correção. A página atualiza automaticamente.');
+            $flash = __('Submissão recebida e em correção.');
         }
 
         return redirect()
