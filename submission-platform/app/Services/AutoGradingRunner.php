@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Submission;
 use App\Models\SubmissionResult;
 use App\Models\TestExecution;
+use App\Support\SuiteAutograding;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -32,7 +33,7 @@ class AutoGradingRunner
             return;
         }
 
-        $submission->loadMissing(['process', 'processTestGroup']);
+        $submission->loadMissing(['process.processTestGroups', 'processTestGroup']);
 
         if (! $submission->process_test_group_id || ! $submission->processTestGroup) {
             SubmissionResult::updateOrCreate(
@@ -104,6 +105,27 @@ class AutoGradingRunner
             $testPaths = ['tests/tests'];
         }
 
+        $allTestPaths = [];
+        foreach ($process?->processTestGroups ?? [] as $tg) {
+            $rawAll = trim((string) $tg->path_pattern);
+            $segmentsAll = $rawAll !== ''
+                ? preg_split('/[\s,]+/', $rawAll, -1, PREG_SPLIT_NO_EMPTY)
+                : [];
+            foreach ($segmentsAll as $seg) {
+                $norm = trim(str_replace('\\', '/', (string) $seg), '/');
+                if ($norm !== '') {
+                    $allTestPaths[] = $norm;
+                }
+            }
+        }
+        $allTestPaths = array_values(array_unique(array_merge(
+            $allTestPaths,
+            SuiteAutograding::discoverTestPathsFromBaseProject()
+        )));
+        if ($allTestPaths === []) {
+            $allTestPaths = ['tests/tests', 'tests/tests1', 'tests/tests2'];
+        }
+
         $processConfigPath = $workDir.DIRECTORY_SEPARATOR.'process-config.json';
         $configPayload = [
             'version' => 1,
@@ -114,7 +136,8 @@ class AutoGradingRunner
             ],
             'results_visibility' => data_get($process?->config, 'results_visibility', 'student'),
             'results_criteria' => data_get($process?->config, 'results_criteria', 'final_grade'),
-            'test_paths' => $testPaths,
+            'all_test_paths' => $allTestPaths,
+            'test_paths' => $allTestPaths,
             'weights' => [
                 'process_percent' => config('autograding.process_weight_percent'),
             ],
@@ -217,15 +240,48 @@ class AutoGradingRunner
             return;
         }
 
+        $submission->loadMissing(['process.processTestGroups', 'processTestGroup']);
+
         $results = $payload['results'] ?? null;
         $summary = is_array($results) ? ($results['summary'] ?? []) : [];
-        $grade = isset($summary['success_rate']) ? round((float) $summary['success_rate'], 2) : null;
         $hasStructuredResults = is_array($results) && isset($summary['total_tests']);
+
+        $reportPayload = is_array($payload) ? $payload : [];
+        $displayTests = SuiteAutograding::collectTestsForDisplay(null, $reportPayload);
+        $processGroups = $submission->process?->processTestGroups ?? [];
+
+        $overallSuccessRate = isset($summary['success_rate'])
+            ? round((float) $summary['success_rate'], 2)
+            : SuiteAutograding::suiteSuccessRatePercent($displayTests);
+
+        $grade = SuiteAutograding::computeFinalGrade($processGroups, $displayTests, $reportPayload);
+
+        $testsByGroup = SuiteAutograding::enrichTestsByGroupWithAccess(
+            SuiteAutograding::groupTestsByProcessTestGroups($processGroups, $displayTests, $reportPayload),
+            $reportPayload,
+            false,
+            true
+        );
+
+        if (is_array($results)) {
+            if (! isset($payload['results']) || ! is_array($payload['results'])) {
+                $payload['results'] = $results;
+            }
+            if (! isset($payload['results']['summary']) || ! is_array($payload['results']['summary'])) {
+                $payload['results']['summary'] = $summary;
+            }
+            $payload['results']['summary']['success_rate_percent'] = $overallSuccessRate;
+            $payload['results']['summary']['weighted_grade_breakdown'] = SuiteAutograding::weightedGradeBreakdown($testsByGroup);
+            if ($grade !== null) {
+                $payload['results']['summary']['weighted_final_grade'] = $grade;
+            }
+        }
 
         $submissionResult = SubmissionResult::updateOrCreate(
             ['submissions_id' => $submission->id],
             [
                 'final_grade' => $grade,
+                'success_rate_percent' => $overallSuccessRate,
                 'report_sent' => json_encode($payload, JSON_THROW_ON_ERROR),
                 'notified_student' => false,
                 'notified_teacher' => false,

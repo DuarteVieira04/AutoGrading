@@ -104,13 +104,21 @@
     </div>
 
     <div class="grid grid-cols-1 gap-4 mt-6">
-        <p class="text-xs text-gray-600 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-            {{ __('Por cada pasta de testes no projeto base (ex.: base-project/tests/tests1/), coloca um ficheiro') }}
-            <code class="rounded bg-white px-1">autograding.json</code>
-            {{ __('com peso (weight), visibilidade (visibility: student, teacher, both) e finalidade (purpose: formative ou summative). Opcionalmente o peso global do processo na UC em') }}
-            <code class="rounded bg-white px-1">config/autograding.php</code>
-            (<code class="rounded bg-white px-1">process_weight_percent</code>).
-        </p>
+     <div class="flex items-start gap-2 mb-4">
+            <input type="hidden" name="email_notification" value="0" />
+            <input
+                type="checkbox"
+                id="email_notification"
+                name="email_notification"
+                value="1"
+                class="mt-1 rounded border-gray-300"
+                @checked(old('email_notification', $process?->email_notification ?? true))
+            />
+            <div>
+                <label for="email_notification" class="text-sm font-medium text-gray-800">{{ __('Notificar por email quando a correção terminar') }}</label>
+                <p class="text-xs text-gray-500">{{ __('Envia email ao aluno (se a visibilidade o permitir) e ao docente do processo.') }}</p>
+            </div>
+        </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

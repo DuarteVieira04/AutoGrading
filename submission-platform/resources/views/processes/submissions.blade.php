@@ -46,8 +46,6 @@
                                         $result = $submission->submissionResult;
                                         $grade = $result?->final_grade;
                                         $hasReport = $result && $result->report_sent;
-                                        $suiteVis = \App\Support\SuiteAutograding::effectiveVisibilityFromSubmission($submission);
-                                        $canViewRowResults = \App\Support\SuiteAutograding::mayViewGradingDetails($suiteVis, false, true);
                                     @endphp
                                     <tr>
                                         <td class="px-4 py-3 text-gray-800">{{ $submission->student->name ?? __('Anónimo') }}</td>
@@ -56,10 +54,8 @@
                                         <td class="px-4 py-3 text-gray-800">{{ basename($submission->zip_file_path) }}</td>
                                         <td class="px-4 py-3 text-gray-800">{{ ucfirst($submission->status) }}</td>
                                         <td class="px-4 py-3 text-gray-800">
-                                            @if (! $canViewRowResults)
-                                                —
-                                            @elseif ($grade !== null)
-                                                {{ number_format((float) $grade, 1) }}%
+                                            @if ($grade !== null)
+                                                {{ number_format((float) $grade, 1) }} {{ __('pts') }}
                                             @elseif ($hasReport)
                                                 {{ __('Resultado pronto') }}
                                             @else

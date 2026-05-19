@@ -40,6 +40,7 @@ class ProcessController extends Controller
             'config' => 'nullable|array',
             'config.results_visibility' => 'nullable|in:student,teacher,both',
             'config.results_criteria' => 'nullable|in:final_grade,tests_only',
+            'email_notification' => 'nullable|boolean',
             'test_groups' => 'nullable|array',
             'test_groups.*.name' => 'nullable|string|max:255',
             'test_groups.*.path_pattern' => 'nullable|string|max:500',
@@ -51,6 +52,7 @@ class ProcessController extends Controller
             'teacher_id' => auth()->id(),
             'process_type_id' => $processType->id,
             'process_name' => $validated['process_name'] ?? null,
+            'email_notification' => $request->boolean('email_notification'),
             'config' => [
                 'results_visibility' => data_get($validated, 'config.results_visibility', 'student'),
                 'results_criteria' => data_get($validated, 'config.results_criteria', 'final_grade'),
@@ -99,6 +101,7 @@ class ProcessController extends Controller
             'config' => 'nullable|array',
             'config.results_visibility' => 'nullable|in:student,teacher,both',
             'config.results_criteria' => 'nullable|in:final_grade,tests_only',
+            'email_notification' => 'nullable|boolean',
             'test_groups' => 'nullable|array',
             'test_groups.*.name' => 'nullable|string|max:255',
             'test_groups.*.path_pattern' => 'nullable|string|max:500',
@@ -112,6 +115,7 @@ class ProcessController extends Controller
 
         $data = [
             'process_name' => $validated['process_name'] ?? null,
+            'email_notification' => $request->boolean('email_notification'),
             'config' => array_merge($prevConfig, [
                 'results_visibility' => data_get($validated, 'config.results_visibility', data_get($prevConfig, 'results_visibility', 'student')),
                 'results_criteria' => data_get($validated, 'config.results_criteria', data_get($prevConfig, 'results_criteria', 'final_grade')),
@@ -190,6 +194,7 @@ class ProcessController extends Controller
             'submissions.student',
             'submissions.submissionResult',
             'submissions.processTestGroup',
+            'processTestGroups',
         ]);
 
         return view('processes.submissions', compact('process'));

@@ -114,6 +114,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Desenvolvimento: redirecionar todos os emails
+    |--------------------------------------------------------------------------
+    |
+    | Útil quando os utilizadores têm emails fictícios (ex. student@local.test).
+    | Todas as notificações de submissão vão para este endereço.
+    |
+    */
+    'override_to' => env('MAIL_OVERRIDE_TO'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Markdown Mail Settings
     |--------------------------------------------------------------------------
     |

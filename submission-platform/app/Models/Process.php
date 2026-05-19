@@ -53,9 +53,6 @@ class Process extends Model
         return $this->belongsToMany(Group::class, 'process_groups', 'process_id', 'group_id');
     }
 
-    /**
-     * Grupos de testes (pastas) e respetiva configuração para este processo.
-     */
     public function processTestGroups()
     {
         return $this->hasMany(ProcessTestGroup::class)->orderBy('id');

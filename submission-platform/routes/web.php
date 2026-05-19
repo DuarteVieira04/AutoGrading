@@ -28,6 +28,7 @@ Route::middleware(['auth', 'teacher'])->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/submissions', [SubmissionController::class, 'index'])->name('submissions.index');
+    Route::get('/submissions/poll-statuses', [SubmissionController::class, 'pollStatuses'])->name('submissions.poll-statuses');
     Route::post('/submissions', [SubmissionController::class, 'store'])->name('submissions.store');
     Route::get('/submissions/{submission}', [SubmissionController::class, 'show'])->name('submissions.show');
 

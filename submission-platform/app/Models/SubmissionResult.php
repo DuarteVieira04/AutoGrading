@@ -14,6 +14,7 @@ class SubmissionResult extends Model
     protected $fillable = [
         'submissions_id',
         'final_grade',
+        'success_rate_percent',
         'report_sent',
         'notified_student',
         'notified_teacher',

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Submission;
 use App\Services\AutoGradingRunner;
+use App\Services\SubmissionGradingNotifier;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -17,18 +18,31 @@ class GradeSubmissionJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(public int $submissionId) {}
+    public function __construct(public int $submissionId)
+    {
+        $queue = config('autograding.queue');
+        if (is_string($queue) && $queue !== '') {
+            $this->onQueue($queue);
+        }
+    }
 
-    public function handle(AutoGradingRunner $runner): void
+    public function handle(AutoGradingRunner $runner, SubmissionGradingNotifier $notifier): void
     {
         $submission = Submission::query()
-            ->with(['process', 'processTestGroup'])
+            ->with(['process.teacher', 'processTestGroup', 'student', 'submissionResult'])
             ->find($this->submissionId);
         if (! $submission) {
             return;
         }
 
-        $runner->grade($submission);
+        $runner->grade($submission->fresh(['process.processTestGroups', 'processTestGroup', 'student', 'submissionResult']));
+
+        $notifier->notify($submission->fresh([
+            'process.teacher',
+            'processTestGroup',
+            'student',
+            'submissionResult',
+        ]));
     }
 
     public function failed(?Throwable $exception): void

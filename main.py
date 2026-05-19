@@ -140,6 +140,103 @@ class AutoGrading:
         t = el.tag
         return t.split("}", 1)[-1] if t.startswith("{") else t
 
+    def _normalize_path_list(self, raw) -> List[str]:
+        if not isinstance(raw, list):
+            return []
+        out: List[str] = []
+        for p in raw:
+            rel = str(p).strip().strip("/\\")
+            if rel:
+                out.append(rel.replace("\\", "/"))
+        return out
+
+    def _discover_test_paths(self) -> List[str]:
+        """Pastas em tests/ com autograding.json (tests, tests1, tests2, …)."""
+        if not self.working_project:
+            return []
+        tests_root = self.working_project / "tests"
+        found: List[str] = []
+        if tests_root.is_dir():
+            for child in sorted(tests_root.iterdir()):
+                if child.is_dir() and (child / "autograding.json").is_file():
+                    found.append(f"tests/{child.name}")
+        return found
+
+    def _resolve_run_test_paths(self) -> List[str]:
+        """União de all_test_paths, test_paths e pastas descobertas no projeto."""
+        cfg = self.process_config if isinstance(self.process_config, dict) else {}
+        all_paths = self._normalize_path_list(cfg.get("all_test_paths"))
+        configured = all_paths if all_paths else self._normalize_path_list(cfg.get("test_paths"))
+        discovered = self._discover_test_paths()
+        merged: List[str] = []
+        for p in configured + discovered:
+            if p not in merged:
+                merged.append(p)
+        return merged
+
+    def _relative_project_path(self, abs_path: str) -> str:
+        if not abs_path or not self.working_project:
+            return ""
+        try:
+            return str(Path(abs_path).resolve().relative_to(self.working_project.resolve())).replace(
+                "\\", "/"
+            )
+        except ValueError:
+            return str(abs_path).replace("\\", "/")
+
+    @staticmethod
+    def _test_matches_path_prefixes(test: Dict, prefixes: List[str]) -> bool:
+        if not prefixes:
+            return True
+        file_path = (test.get("file") or "").replace("\\", "/").lstrip("./")
+        for prefix in prefixes:
+            pre = prefix.strip("/")
+            if not pre:
+                continue
+            if file_path and (file_path == pre or file_path.startswith(pre + "/")):
+                return True
+        name = (test.get("name") or "").replace("\\", "/")
+        for prefix in prefixes:
+            pre = prefix.strip("/")
+            if pre and (f"/{pre}/" in name or name.startswith(pre + "/")):
+                return True
+        return False
+
+    def _filter_results_by_paths(self, results: Dict, prefixes: List[str]) -> Dict:
+        if not prefixes:
+            return results
+        tests = results.get("tests") or []
+        if not isinstance(tests, list):
+            return results
+        filtered = [t for t in tests if self._test_matches_path_prefixes(t, prefixes)]
+        passed = failed = errors = skipped = 0
+        duration = 0.0
+        for t in filtered:
+            st = t.get("status", "")
+            if st == "passed":
+                passed += 1
+            elif st == "skipped":
+                skipped += 1
+            elif st == "failed":
+                failed += 1
+            else:
+                errors += 1
+        total = len(filtered)
+        summary = {
+            "total_tests": total,
+            "successful": passed,
+            "failed": failed,
+            "errors": errors,
+            "skipped": skipped,
+            "duration": duration,
+            "success_rate": (passed / total * 100) if total > 0 else 0.0,
+        }
+        out = dict(results)
+        out["summary"] = summary
+        out["tests"] = filtered
+        out["filtered_for_paths"] = prefixes
+        return out
+
     def _finalize_report_xml(self, local_xml: Path, dest_xml: Path) -> None:
         dest_xml.parent.mkdir(parents=True, exist_ok=True)
         if local_xml.is_file():
@@ -323,26 +420,19 @@ class AutoGrading:
 
             path_args: List[str] = []
             platform_mode = self.storage_work_dir is not None
-            tp = (
-                self.process_config.get("test_paths")
-                if isinstance(self.process_config, dict)
-                else None
-            )
-            if isinstance(tp, list) and tp:
-                for p in tp:
-                    rel = str(p).strip().strip("/\\")
-                    if not rel:
-                        continue
-                    full = (self.working_project / rel).resolve()
-                    if not full.exists():
-                        self._log(
-                            f"WARNING: pasta de testes inexistente no projeto: {full}"
-                        )
-                    path_args.append(str(full))
+            run_paths = self._resolve_run_test_paths()
+
+            for rel in run_paths:
+                full = (self.working_project / rel).resolve()
+                if not full.exists():
+                    self._log(
+                        f"WARNING: pasta de testes inexistente no projeto: {full}"
+                    )
+                path_args.append(str(full))
 
             if platform_mode and not path_args:
                 self._log(
-                    "ERROR: process-config sem test_paths válidos (correção na plataforma)."
+                    "ERROR: process-config sem all_test_paths/test_paths válidos (correção na plataforma)."
                 )
                 return None, dest_report
 
@@ -397,16 +487,16 @@ class AutoGrading:
             return None, dest_report
 
     def _merge_suite_autograding_json(self) -> None:
-        """Mescla autograding.json de cada pasta em test_paths para process_config.suite_configs."""
+        """Mescla autograding.json de cada pasta executada para process_config.suite_configs."""
         if not self.working_project:
             return
         if not isinstance(self.process_config, dict):
             self.process_config = {}
-        tp = self.process_config.get("test_paths")
-        if not isinstance(tp, list) or not tp:
+        run_paths = self._resolve_run_test_paths()
+        if not run_paths:
             return
         suites: Dict[str, Dict] = {}
-        for raw in tp:
+        for raw in run_paths:
             rel = str(raw).strip().strip("/\\")
             if not rel:
                 continue
@@ -448,6 +538,7 @@ class AutoGrading:
             name = el.get("name") or ""
             classname = el.get("classname") or el.get("class") or ""
             disp = f"{classname}::{name}" if classname else name
+            rel_file = self._relative_project_path(el.get("file") or "")
 
             fail_nodes = [
                 c for c in el
@@ -474,7 +565,10 @@ class AutoGrading:
                 if body:
                     msg = f"{msg}\n{body}".strip() if msg else body
 
-            tests.append({"name": disp, "status": status, "message": msg})
+            row = {"name": disp, "status": status, "message": msg}
+            if rel_file:
+                row["file"] = rel_file
+            tests.append(row)
 
         total = len(tests)
         summary = {
@@ -736,6 +830,8 @@ class AutoGrading:
             return False
 
         results = self._parse_results(test_output or "", junit_fallback=local_junit)
+        total = len(results.get("tests") or [])
+        self._log(f"OK: {total} teste(s) agregados de todas as pastas configuradas")
 
         self._display_results(results)
 
