@@ -14,7 +14,7 @@ class ProcessTypeSeeder extends Seeder
         }
 
         ProcessType::create([
-            'name' => ProcessType::DEFAULT_NAME,
+            'name' => 'Past',
         ]);
     }
 }
