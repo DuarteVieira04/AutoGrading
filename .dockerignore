@@ -1,0 +1,33 @@
+.git
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+**/.phpunit.result.cache
+**/.phpunit.cache
+**/__pycache__
+**/*.log
+**/.idea
+**/.vscode
+**/.fleet
+
+# Dependências instaladas no build
+**/node_modules
+**/vendor
+
+# Projetos locais de dev (não necessários em produção)
+working-project
+testing-project
+
+# Binários / artefactos locais
+submission-platform/mailpit
+submission-platform/storage/app/**
+submission-platform/storage/logs/**
+submission-platform/storage/framework/cache/data/**
+submission-platform/storage/framework/sessions/**
+submission-platform/storage/framework/views/**
+submission-platform/bootstrap/cache/*.php
+
+# Builds gerados no Dockerfile
+submission-platform/public/build
+submission-platform/public/hot
