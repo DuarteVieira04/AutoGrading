@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     unzip \
     curl \
+    ca-certificates \
     gettext-base \
     python3 \
     libzip-dev \
@@ -13,15 +14,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libonig-dev \
     libxml2-dev \
     libpq-dev \
-    && docker-php-ext-configure opcache --enable-opcache \
+    libsqlite3-dev \
     && docker-php-ext-install -j"$(nproc)" \
-        opcache \
         pdo_pgsql \
         pdo_sqlite \
         zip \
         mbstring \
         xml \
+        dom \
         bcmath \
+        opcache \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
