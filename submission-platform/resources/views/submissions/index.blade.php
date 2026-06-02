@@ -31,23 +31,29 @@
                 </div>
 
                 <div>
-                    <label for="process_test_group_id" class="block text-sm font-medium text-gray-800">{{ __('Grupo de testes / processo') }}</label>
+                    <label for="process_test_group_id" class="block text-sm font-medium text-gray-800">{{ __('Processo de correção') }}</label>
                     <select id="process_test_group_id" name="process_test_group_id" required
                             class="mt-2 block w-full text-sm text-gray-800 border-gray-300 rounded-md">
-                        <option value="">{{ __('Selecione um grupo de testes') }}</option>
+                        <option value="">{{ __('Selecione um processo de correção') }}</option>
                         @foreach ($processes as $process)
-                            <optgroup label="{{ $process->process_name }}">
-                                @foreach ($process->processTestGroups as $tg)
-                                    <option value="{{ $tg->id }}">{{ $tg->name }} — {{ $tg->path_pattern }}</option>
-                                @endforeach
-                            </optgroup>
+                            @php
+                                $defaultGroup = $process->processTestGroups->first();
+                                $limit = $process->submissionLimit();
+                                $used = $limit > 0 ? $process->submissionsCountForStudent((int) auth()->id()) : 0;
+                                $suffix = $limit > 0
+                                    ? ' — '.__(':used/:limit submissões', ['used' => $used, 'limit' => $limit])
+                                    : '';
+                            @endphp
+                            @if ($defaultGroup)
+                                <option value="{{ $defaultGroup->id }}">{{ ($process->process_name ?? __('Processo sem nome')).$suffix }}</option>
+                            @endif
                         @endforeach
                     </select>
                     @error('process_test_group_id')
                         <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                     @enderror
                     @if ($processes->isEmpty())
-                        <p class="mt-2 text-sm text-gray-600">{{ __('Não há processos com grupos de testes disponíveis para a sua turma.') }}</p>
+                        <p class="mt-2 text-sm text-gray-600">{{ __('Não há processos de correção disponíveis para a sua turma (sem projeto pronto ou limite de submissões atingido).') }}</p>
                     @endif
                 </div>
 
@@ -87,9 +93,9 @@
                             @foreach ($submissions as $row)
                                 @php
                                     $rowView = \App\Support\SubmissionRowPresenter::forSubmission($row);
-                                    $isPolling = in_array($row->status, ['pending', 'processing'], true);
+                                    $rowView['isPolling'] = in_array($row->status, ['pending', 'processing'], true);
                                 @endphp
-                                @include('submissions.index.partials.table-row', array_merge($rowView, ['isPolling' => $isPolling]))
+                                @include('submissions.index.partials.table-row', $rowView)
                             @endforeach
                         </tbody>
                     </table>

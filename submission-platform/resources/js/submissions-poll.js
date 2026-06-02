@@ -13,8 +13,17 @@ export function initSubmissionsPoll() {
     }
 
     const intervalMs = parseInt(table.dataset.pollInterval || '3000', 10);
+    const maxPollMs = parseInt(table.dataset.pollMaxMs || String(30 * 60 * 1000), 10);
+    const startedAt = Date.now();
 
     const poll = async () => {
+        if (Date.now() - startedAt > maxPollMs) {
+            table.querySelectorAll('tr[data-submission-id][data-poll="1"]').forEach((row) => {
+                row.dataset.poll = '0';
+            });
+            return;
+        }
+
         const rows = [...table.querySelectorAll('tr[data-submission-id][data-poll="1"]')];
         if (rows.length === 0) {
             return;

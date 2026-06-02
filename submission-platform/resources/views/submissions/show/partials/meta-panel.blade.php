@@ -32,15 +32,18 @@
         </p>
     </div>
     <div class="space-y-1">
-        <p class="text-sm font-semibold text-gray-700">{{ __('Classificação (pontos)') }}</p>
+        <p class="text-sm font-semibold text-gray-700">{{ ($isEvaluation ?? true) ? __('Classificação') : __('Avaliação') }}</p>
         <p class="text-sm text-gray-900">
             @include('submissions.partials.grade-points', [
                 'result' => $result,
                 'finalGradePoints' => $finalGradePoints,
                 'maxGradePoints' => $maxGradePoints,
+                'displayFinalGrade' => $displayFinalGrade ?? null,
+                'displayMaxGrade' => $displayMaxGrade ?? null,
+                'displayGradeUnit' => $displayGradeUnit ?? __('pontos'),
+                'isEvaluation' => $isEvaluation ?? null,
                 'canView' => $canViewFinalGrade ?? false,
                 'showMax' => true,
-                'unit' => __('pontos'),
             ])
         </p>
         @if (($canViewFinalGrade ?? false) && $overallSuccessRate !== null)

@@ -43,8 +43,8 @@
                             <tbody class="divide-y divide-gray-200 bg-white">
                                 @foreach ($process->submissions as $submission)
                                     @php
-                                        $result = $submission->submissionResult;
-                                        $grade = $result?->final_grade;
+                                        $viewData = \App\Support\SubmissionRowPresenter::forSubmission($submission);
+                                        $result = $viewData['result'];
                                         $hasReport = $result && $result->report_sent;
                                     @endphp
                                     <tr>
@@ -52,14 +52,21 @@
                                         <td class="px-4 py-3 text-gray-800">{{ $submission->processTestGroup->name ?? '—' }}</td>
                                         <td class="px-4 py-3 text-gray-800">{{ $submission->submission_date?->format('d/m/Y H:i') ?? $submission->created_at->format('d/m/Y H:i') }}</td>
                                         <td class="px-4 py-3 text-gray-800">{{ basename($submission->zip_file_path) }}</td>
-                                        <td class="px-4 py-3 text-gray-800">{{ ucfirst($submission->status) }}</td>
+                                        <td class="px-4 py-3 text-gray-800">{{ \App\Support\SubmissionRowPresenter::statusLabel($submission->status) }}</td>
                                         <td class="px-4 py-3 text-gray-800">
-                                            @if ($grade !== null)
-                                                {{ number_format((float) $grade, 1) }} {{ __('pts') }}
-                                            @elseif ($hasReport)
-                                                {{ __('Resultado pronto') }}
-                                            @else
-                                                —
+                                            @include('submissions.partials.grade-points', [
+                                                'result' => $result,
+                                                'finalGradePoints' => $viewData['finalGradePoints'],
+                                                'maxGradePoints' => $viewData['maxGradePoints'],
+                                                'displayFinalGrade' => $viewData['displayFinalGrade'],
+                                                'displayMaxGrade' => $viewData['displayMaxGrade'],
+                                                'displayGradeUnit' => $viewData['displayGradeUnit'],
+                                                'isEvaluation' => $viewData['isEvaluation'],
+                                                'canView' => true,
+                                                'showMax' => $viewData['isEvaluation'] && $viewData['evaluationMaxGrade'] !== null,
+                                            ])
+                                            @if (! $viewData['displayFinalGrade'] && $hasReport && ($viewData['isEvaluation'] ?? true))
+                                                <span class="text-xs text-gray-500">{{ __('Resultado pronto') }}</span>
                                             @endif
                                         </td>
                                         <td class="px-4 py-3 text-right">

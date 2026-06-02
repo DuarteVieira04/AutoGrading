@@ -11,28 +11,32 @@ use Illuminate\Support\Facades\File;
  * - weight: int (pontos máximos da pasta na nota final, ex. 10, 30 — nota = taxa_% × weight / 100)
  * - visibility: "student"|"teacher"|"both" — quem vê estes resultados na UI
  * - purpose: "formative"|"summative" — formativa (feedback/verificação) vs sumativa (avaliação final)
+ * - active: bool — se false, a pasta não é executada na correção (omissão = true)
  */
 final class SuiteAutograding
 {
-    public static function jsonAbsolutePath(string $pathPattern): string
+    public static function jsonAbsolutePath(string $pathPattern, ?string $projectRoot = null): string
     {
-        $root = rtrim((string) config('autograding.project_root'), DIRECTORY_SEPARATOR);
         $rel = trim(str_replace('\\', '/', $pathPattern), '/');
+        $root = $projectRoot !== null && trim($projectRoot) !== ''
+            ? rtrim($projectRoot, DIRECTORY_SEPARATOR)
+            : rtrim((string) config('autograding.project_root'), DIRECTORY_SEPARATOR)
+                .DIRECTORY_SEPARATOR.'base-project';
 
-        return $root.DIRECTORY_SEPARATOR.'base-project'.DIRECTORY_SEPARATOR
+        return $root.DIRECTORY_SEPARATOR
             .str_replace('/', DIRECTORY_SEPARATOR, $rel).DIRECTORY_SEPARATOR.'autograding.json';
     }
 
     /**
-     * @return array{weight?: int, visibility?: string, purpose?: string}|null
+     * @return array{weight?: int, visibility?: string, purpose?: string, active?: bool}|null
      */
-    public static function read(?string $pathPattern): ?array
+    public static function read(?string $pathPattern, ?string $projectRoot = null): ?array
     {
         if ($pathPattern === null || trim($pathPattern) === '') {
             return null;
         }
 
-        $path = self::jsonAbsolutePath($pathPattern);
+        $path = self::jsonAbsolutePath($pathPattern, $projectRoot);
         if (! File::isFile($path)) {
             return null;
         }
@@ -52,11 +56,15 @@ final class SuiteAutograding
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{weight?: int, visibility?: string, purpose?: string}
+     * @return array{weight?: int, visibility?: string, purpose?: string, active?: bool}
      */
     public static function normalize(array $data): array
     {
         $out = [];
+
+        if (array_key_exists('active', $data)) {
+            $out['active'] = self::parseActive($data['active']);
+        }
 
         if (array_key_exists('weight', $data) && is_numeric($data['weight'])) {
             $normalized = self::normalizeWeightValue($data['weight']);
@@ -76,6 +84,129 @@ final class SuiteAutograding
         }
 
         return $out;
+    }
+
+    /** Omissão de `active` no JSON equivale a true. */
+    public static function isActive(?array $config): bool
+    {
+        if ($config === null) {
+            return true;
+        }
+
+        return array_key_exists('active', $config)
+            ? (bool) $config['active']
+            : true;
+    }
+
+    public static function parseActive(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (int) $value !== 0;
+        }
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+
+            return ! in_array($normalized, ['0', 'false', 'no', 'off'], true);
+        }
+
+        return true;
+    }
+
+    public static function isPathActive(string $pathPattern, ?string $projectRoot = null): bool
+    {
+        $pathPattern = trim(str_replace('\\', '/', $pathPattern), '/');
+        if ($pathPattern === '') {
+            return true;
+        }
+
+        $root = $projectRoot !== null && trim($projectRoot) !== ''
+            ? rtrim($projectRoot, DIRECTORY_SEPARATOR)
+            : null;
+
+        if ($root !== null) {
+            $dir = $root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $pathPattern);
+            if (! is_dir($dir)) {
+                return false;
+            }
+        }
+
+        return self::isActive(self::read($pathPattern, $projectRoot));
+    }
+
+    /**
+     * Raiz do projeto Laravel usado na correção (working/ ou base-project global).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public static function resolveProjectRootFromPayload(array $payload): ?string
+    {
+        $working = data_get($payload, 'working_project_path');
+        if (is_string($working) && trim($working) !== '' && is_dir($working)) {
+            return rtrim($working, DIRECTORY_SEPARATOR);
+        }
+
+        if (data_get($payload, 'used_global_base_project')) {
+            return ProcessProjectPaths::globalBaseProjectPath();
+        }
+
+        return null;
+    }
+
+    /**
+     * Pastas em {project}/tests/ com autograding.json ativo.
+     *
+     * @return list<string>
+     */
+    public static function discoverTestPathsFromProject(string $projectRoot): array
+    {
+        $projectRoot = rtrim($projectRoot, DIRECTORY_SEPARATOR);
+        $testsRoot = $projectRoot.DIRECTORY_SEPARATOR.'tests';
+
+        if (! is_dir($testsRoot)) {
+            return [];
+        }
+
+        $paths = [];
+        foreach (scandir($testsRoot) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $dir = $testsRoot.DIRECTORY_SEPARATOR.$entry;
+            if (! is_dir($dir) || ! is_file($dir.DIRECTORY_SEPARATOR.'autograding.json')) {
+                continue;
+            }
+            $rel = 'tests/'.$entry;
+            if (self::isPathActive($rel, $projectRoot)) {
+                $paths[] = $rel;
+            }
+        }
+
+        sort($paths);
+
+        return $paths;
+    }
+
+    /**
+     * @param  list<string>  $paths
+     * @return list<string>
+     */
+    public static function filterActivePaths(array $paths, ?string $projectRoot = null): array
+    {
+        $active = [];
+        foreach ($paths as $path) {
+            $norm = trim(str_replace('\\', '/', (string) $path), '/');
+            if ($norm === '') {
+                continue;
+            }
+            if (self::isPathActive($norm, $projectRoot)) {
+                $active[] = $norm;
+            }
+        }
+
+        return array_values($active);
     }
 
     /**
@@ -127,6 +258,9 @@ final class SuiteAutograding
         $hasWeight = false;
 
         foreach ($testsByGroup as $block) {
+            if (($block['active'] ?? true) === false) {
+                continue;
+            }
             $weight = (int) ($block['weight'] ?? 0);
             if ($weight <= 0) {
                 continue;
@@ -176,6 +310,9 @@ final class SuiteAutograding
     {
         $sum = 0;
         foreach ($testsByGroup as $block) {
+            if (($block['active'] ?? true) === false) {
+                continue;
+            }
             $sum += (int) ($block['weight'] ?? 0);
         }
 
@@ -236,7 +373,7 @@ final class SuiteAutograding
             if ($s === '') {
                 continue;
             }
-            $read = self::read($s);
+            $read = self::read($s, self::resolveProjectRootFromPayload($reportPayload));
             if (! empty($read['visibility'])) {
                 return $read['visibility'];
             }
@@ -269,7 +406,7 @@ final class SuiteAutograding
             return self::normalize($suiteCfgs[$segment]);
         }
 
-        return self::read($segment !== '' ? $segment : null) ?? [];
+        return self::read($segment !== '' ? $segment : null, self::resolveProjectRootFromPayload($reportPayload)) ?? [];
     }
 
     /**
@@ -340,8 +477,9 @@ final class SuiteAutograding
                 : null;
 
             $block['weight'] = $weight;
+            $block['active'] = self::isActive($cfg);
             $block['success_rate_percent'] = $successRate;
-            $block['weighted_points'] = $weightedPoints;
+            $block['weighted_points'] = ($block['active'] ?? true) ? $weightedPoints : null;
             $block['visibility'] = $visibility;
             $block['purpose'] = $purpose;
             $block['can_view_details'] = self::canViewSuiteDetails(
@@ -451,8 +589,12 @@ final class SuiteAutograding
             if (! is_dir($dir)) {
                 continue;
             }
-            if (is_file($dir.DIRECTORY_SEPARATOR.'autograding.json')) {
-                $paths[] = 'tests/'.$entry;
+            if (! is_file($dir.DIRECTORY_SEPARATOR.'autograding.json')) {
+                continue;
+            }
+            $rel = 'tests/'.$entry;
+            if (self::isPathActive($rel, $testsRoot.DIRECTORY_SEPARATOR.'..')) {
+                $paths[] = $rel;
             }
         }
 
@@ -469,7 +611,23 @@ final class SuiteAutograding
      */
     public static function resolveAllTestFolderPaths(iterable $groups, array $payload = []): array
     {
+        $projectRoot = self::resolveProjectRootFromPayload($payload);
+
+        if ($projectRoot !== null) {
+            $discovered = self::discoverTestPathsFromProject($projectRoot);
+            if ($discovered !== []) {
+                return $discovered;
+            }
+        }
+
         $paths = [];
+
+        if ($projectRoot === null) {
+            foreach (self::discoverTestPathsFromBaseProject() as $p) {
+                $paths[] = $p;
+            }
+        }
+
         foreach ($groups as $group) {
             foreach (self::pathPatternSegments($group->path_pattern) as $seg) {
                 $paths[] = $seg;
@@ -500,10 +658,6 @@ final class SuiteAutograding
             }
         }
 
-        foreach (self::discoverTestPathsFromBaseProject() as $p) {
-            $paths[] = $p;
-        }
-
         $merged = [];
         foreach ($paths as $p) {
             if (! in_array($p, $merged, true)) {
@@ -513,7 +667,7 @@ final class SuiteAutograding
 
         usort($merged, fn (string $a, string $b) => strlen($b) <=> strlen($a));
 
-        return $merged;
+        return self::filterActivePaths($merged, $projectRoot);
     }
 
     public static function labelForTestPath(string $path, ?string $groupName = null): string
@@ -538,10 +692,14 @@ final class SuiteAutograding
     public static function groupTestsByProcessTestGroups(iterable $groups, array $tests, array $payload = []): array
     {
         $groupList = collect($groups)->values();
+        $projectRoot = self::resolveProjectRootFromPayload($payload);
 
         $segmentToMeta = [];
         foreach ($groupList as $group) {
             foreach (self::pathPatternSegments($group->path_pattern) as $seg) {
+                if (! self::isPathActive($seg, $projectRoot)) {
+                    continue;
+                }
                 if (! isset($segmentToMeta[$seg])) {
                     $segmentToMeta[$seg] = [
                         'name' => $group->name,
@@ -552,6 +710,9 @@ final class SuiteAutograding
         }
 
         foreach (self::resolveAllTestFolderPaths($groups, $payload) as $seg) {
+            if (! self::isPathActive($seg, $projectRoot)) {
+                continue;
+            }
             if (! isset($segmentToMeta[$seg])) {
                 $segmentToMeta[$seg] = [
                     'name' => self::labelForTestPath($seg),

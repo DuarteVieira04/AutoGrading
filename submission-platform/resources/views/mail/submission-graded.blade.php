@@ -24,8 +24,17 @@
 
 **{{ __('Estado') }}:** {{ ucfirst($submission->status) }}
 
-@if ($submission->status === 'graded' && $result?->final_grade !== null)
-**{{ __('Classificação') }}:** {{ number_format((float) $result->final_grade, 1) }} {{ __('pontos') }}
+@if ($submission->status === 'graded')
+    @if (! ($isEvaluation ?? true))
+**{{ __('Avaliação') }}:** {{ __('Este processo não conta para avaliação (apenas formativo).') }}
+    @elseif (($displayFinalGrade ?? null) !== null)
+@php
+    $maxLabel = ($evaluationMaxGrade ?? null) !== null
+        ? rtrim(rtrim(number_format((float) $displayMaxGrade, 2, '.', ''), '0'), '.')
+        : null;
+@endphp
+**{{ __('Classificação') }}:** {{ number_format((float) $displayFinalGrade, 1) }}@if ($maxLabel) / {{ $maxLabel }}@endif {{ $displayGradeUnit ?? __('pontos') }}
+    @endif
 @endif
 
 @if ($submission->status === 'failed')

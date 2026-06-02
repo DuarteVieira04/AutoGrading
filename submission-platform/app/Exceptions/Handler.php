@@ -35,13 +35,17 @@ class Handler extends ExceptionHandler
                 ], 413);
             }
 
-            $message = __('The upload is larger than PHP allows (post_max_size / upload_max_filesize). Increase those in php.ini, or use composer run serve for local development.');
+            $message = __('O ficheiro ZIP excede o limite de upload do PHP (post_max_size / upload_max_filesize). Aumenta esses valores no php.ini (ver submission-platform/php.ini).');
 
             if ($request->routeIs('submissions.store')) {
                 return redirect()->route('submissions.index')->withErrors(['file' => $message]);
             }
 
-            return redirect()->back()->withErrors(['file' => $message]);
+            if ($request->routeIs('processes.store', 'processes.update')) {
+                return redirect()->back()->withInput()->withErrors(['project_zip' => $message]);
+            }
+
+            return redirect()->back()->withInput()->withErrors(['file' => $message]);
         });
     }
 }

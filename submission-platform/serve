@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Arranca o servidor web com limites de upload para ZIPs grandes (~100 MB).
+set -euo pipefail
+cd "$(dirname "$0")"
+exec php -c php.ini artisan serve "$@"

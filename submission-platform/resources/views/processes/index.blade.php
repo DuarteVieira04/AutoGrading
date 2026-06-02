@@ -41,7 +41,7 @@
                             </th>
 
                             <th class="px-4 py-3 text-left font-medium text-gray-700">
-                                {{ __('Pasta de testes') }}
+                                {{ __('Projeto') }}
                             </th>
 
                             <th class="px-4 py-3 text-left font-medium text-gray-700">
@@ -78,18 +78,45 @@
                                 {{-- PROCESS TYPE --}}
                                 <td class="px-4 py-3 text-gray-700">
                                     {{ $p->processType->name ?? '—' }}
+                                    @php
+                                        $limit = $p->submissionLimit();
+                                    @endphp
+                                    @if ($limit > 0)
+                                        <span class="mt-1 block text-[11px] text-gray-500">{{ __('Limite: :n submissões/aluno', ['n' => $limit]) }}</span>
+                                    @else
+                                        <span class="mt-1 block text-[11px] text-gray-400">{{ __('Submissões ilimitadas') }}</span>
+                                    @endif
                                 </td>
 
-                                {{-- TEST SUITES --}}
-                                <td class="px-4 py-3 text-xs text-gray-700 align-top max-w-xs">
-                                    @forelse ($p->processTestGroups as $tg)
-                                        <div class="mb-3 last:mb-0 border-b border-gray-100 pb-2 last:border-0 last:pb-0">
-                                            <span class="font-medium text-gray-900">{{ $tg->name }}</span>
-                                            <span class="block font-mono text-[11px] text-gray-500">{{ $tg->path_pattern }}</span>
-                                        </div>
-                                    @empty
-                                        <span class="text-gray-400 italic">{{ __('Nenhuma pasta de testes') }}</span>
-                                    @endforelse
+                                {{-- PROJECT STATUS --}}
+                                <td class="px-4 py-3 text-xs align-top">
+                                    @php
+                                        $st = $p->project_status;
+                                        $hasOwn = $st === \App\Models\Process::PROJECT_STATUS_READY && $p->project_base_path;
+                                        $hasGlobal = \App\Support\ProcessProjectPaths::hasGlobalBaseProject();
+                                        $info = match ($st) {
+                                            \App\Models\Process::PROJECT_STATUS_READY => ['Pronto', 'bg-green-100 text-green-800'],
+                                            \App\Models\Process::PROJECT_STATUS_PREPARING => ['A preparar', 'bg-blue-100 text-blue-800'],
+                                            \App\Models\Process::PROJECT_STATUS_FAILED => ['Erro', 'bg-red-100 text-red-800'],
+                                            \App\Models\Process::PROJECT_STATUS_PENDING => ['Pendente', 'bg-yellow-100 text-yellow-800'],
+                                            default => null,
+                                        };
+                                    @endphp
+                                    @if ($hasOwn)
+                                        <span class="inline-block rounded px-2 py-1 {{ $info[1] }}">{{ __($info[0]) }}</span>
+                                        @if ($p->project_prepared_at)
+                                            <span class="mt-1 block text-[11px] text-gray-500">{{ $p->project_prepared_at->format('d/m/y H:i') }}</span>
+                                        @endif
+                                    @elseif ($info)
+                                        <span class="inline-block rounded px-2 py-1 {{ $info[1] }}">{{ __($info[0]) }}</span>
+                                        @if ($hasGlobal)
+                                            <span class="mt-1 block text-[11px] text-indigo-700">{{ __('Usa base-project partilhado') }}</span>
+                                        @endif
+                                    @elseif ($hasGlobal)
+                                        <span class="inline-block rounded px-2 py-1 bg-indigo-100 text-indigo-800">{{ __('Base global') }}</span>
+                                    @else
+                                        <span class="text-gray-400 italic">{{ __('Sem projeto') }}</span>
+                                    @endif
                                 </td>
 
                                 {{-- CLASS GROUPS (turmas) --}}

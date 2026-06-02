@@ -29,17 +29,25 @@
                 </div>
             </div>
             <div class="w-full rounded-lg border border-gray-200 bg-slate-50 p-4 text-sm text-gray-900">
-                <p class="font-semibold text-gray-700">{{ __('Nota ponderada') }}</p>
+                <p class="font-semibold text-gray-700">
+                    {{ ($isEvaluation ?? true) ? __('Nota final') : __('Avaliação') }}
+                </p>
                 <p class="mt-1 text-xl font-semibold text-gray-900">
                     @include('submissions.partials.grade-points', [
                         'result' => $result,
                         'finalGradePoints' => $finalGradePoints,
                         'maxGradePoints' => $maxGradePoints,
+                        'displayFinalGrade' => $displayFinalGrade ?? null,
+                        'displayMaxGrade' => $displayMaxGrade ?? null,
+                        'displayGradeUnit' => $displayGradeUnit ?? __('pontos'),
+                        'isEvaluation' => $isEvaluation ?? null,
                         'canView' => true,
                         'showMax' => true,
-                        'unit' => __('pontos'),
                     ])
                 </p>
+                @if (! ($isEvaluation ?? true))
+                    <p class="mt-1 text-xs text-gray-500">{{ __('Este processo não conta para avaliação; os testes servem apenas como feedback formativo.') }}</p>
+                @endif
             </div>
         </div>
         @if (! $hasTestRows)
@@ -48,9 +56,11 @@
                 <p class="mt-1">{{ __('Não há detalhes de cada teste disponíveis.') }}</p>
             </div>
         @endif
-        <div class="flex flex-wrap items-center gap-2">
-            @include('submissions.partials.evaluation-badge', ['passed' => $passed])
-        </div>
+        @if ($isEvaluation ?? true)
+            <div class="flex flex-wrap items-center gap-2">
+                @include('submissions.partials.evaluation-badge', ['passed' => $passed])
+            </div>
+        @endif
     @else
         <p class="text-sm text-gray-600">{{ __('Não há informação estruturada de correção disponível para esta submissão.') }}</p>
     @endif

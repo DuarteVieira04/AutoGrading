@@ -23,8 +23,11 @@ class SubmissionGradingNotifier
         ]);
 
         $process = $submission->process;
-        if (! $process?->email_notification) {
-            Log::info('Submission grading email skipped: email_notification disabled on process', [
+        $notifyStudent = (bool) data_get($process?->config, 'email_notification_student', $process?->email_notification);
+        $notifyTeacher = (bool) data_get($process?->config, 'email_notification_teacher', $process?->email_notification);
+
+        if (! $notifyStudent && ! $notifyTeacher) {
+            Log::info('Submission grading email skipped: notifications disabled on process', [
                 'submission_id' => $submission->id,
                 'process_id' => $process?->id,
             ]);
@@ -37,11 +40,11 @@ class SubmissionGradingNotifier
             return;
         }
 
-        if (! $result->notified_student) {
+        if ($notifyStudent && ! $result->notified_student) {
             $this->sendToStudent($submission, $result);
         }
 
-        if (! $result->notified_teacher) {
+        if ($notifyTeacher && ! $result->notified_teacher) {
             $this->sendToTeacher($submission, $result);
         }
     }

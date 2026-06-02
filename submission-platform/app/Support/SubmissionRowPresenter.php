@@ -56,6 +56,31 @@ final class SubmissionRowPresenter
     }
 
     /**
+     * @param  array<string, mixed>|null  $config
+     */
+    public static function processIsEvaluation(?array $config): bool
+    {
+        if (! is_array($config)) {
+            return true;
+        }
+        if (array_key_exists('is_evaluation', $config)) {
+            return (bool) $config['is_evaluation'];
+        }
+
+        return ($config['results_criteria'] ?? 'final_grade') === 'final_grade';
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $config
+     */
+    public static function processEvaluationMaxGrade(?array $config): ?float
+    {
+        $value = is_array($config) ? ($config['evaluation_max_grade'] ?? null) : null;
+
+        return is_numeric($value) && (float) $value > 0 ? (float) $value : null;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function forSubmission(Submission $submission): array
@@ -111,6 +136,21 @@ final class SubmissionRowPresenter
             ?? data_get($summary, 'success_rate');
         $successRatePercent = $successRatePercent !== null ? (float) $successRatePercent : null;
 
+        $processConfig = $row->process?->config ?? null;
+        $processConfig = is_array($processConfig) ? $processConfig : null;
+        $isEvaluation = self::processIsEvaluation($processConfig);
+        $evaluationMaxGrade = self::processEvaluationMaxGrade($processConfig);
+
+        if ($isEvaluation && $evaluationMaxGrade !== null && $finalGradePoints !== null && $maxGradePoints > 0) {
+            $displayFinalGrade = round($finalGradePoints / $maxGradePoints * $evaluationMaxGrade, 2);
+            $displayMaxGrade = $evaluationMaxGrade;
+            $displayGradeUnit = __('valores');
+        } else {
+            $displayFinalGrade = $finalGradePoints;
+            $displayMaxGrade = (float) $maxGradePoints;
+            $displayGradeUnit = __('pontos');
+        }
+
         $passed = self::evaluationPassed(
             (string) $row->status,
             $finalGradePoints,
@@ -130,6 +170,11 @@ final class SubmissionRowPresenter
             'maxGradePoints',
             'finalGradePoints',
             'successRatePercent',
+            'isEvaluation',
+            'evaluationMaxGrade',
+            'displayFinalGrade',
+            'displayMaxGrade',
+            'displayGradeUnit',
         );
     }
 
@@ -182,6 +227,11 @@ final class SubmissionRowPresenter
             'passed' => $passed,
             'finalGradePoints' => $finalGradePoints,
             'maxGradePoints' => $maxGradePoints,
+            'isEvaluation' => $base['isEvaluation'],
+            'evaluationMaxGrade' => $base['evaluationMaxGrade'],
+            'displayFinalGrade' => $base['displayFinalGrade'],
+            'displayMaxGrade' => $base['displayMaxGrade'],
+            'displayGradeUnit' => $base['displayGradeUnit'],
             'logsTests' => $tests->filter(fn ($test) => ! empty($test->execution_logs)),
         ]);
     }

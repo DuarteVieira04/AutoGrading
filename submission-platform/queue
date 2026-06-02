@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+exec php -c php.ini artisan queue:work --timeout=1900 "$@"

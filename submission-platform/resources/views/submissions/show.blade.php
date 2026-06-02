@@ -37,6 +37,10 @@
 
             @include('submissions.show.partials.summary-panel')
 
+            @if (($submission->status ?? '') === 'failed')
+                @include('submissions.show.partials.pipeline-error-panel')
+            @endif
+
             @if (($canViewFinalGrade ?? false) && ($hasSummary ?? false) && ($tests ?? collect())->isNotEmpty())
                 @include('submissions.show.partials.tests-table')
             @endif

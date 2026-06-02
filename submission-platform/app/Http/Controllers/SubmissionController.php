@@ -7,10 +7,12 @@ use App\Models\Process;
 use App\Models\ProcessTestGroup;
 use App\Models\Submission;
 use App\Services\AutoGradingRunner;
+use App\Support\ProcessProjectPaths;
 use App\Support\SubmissionRowPresenter;
 use App\Support\SuiteAutograding;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 
 class SubmissionController extends Controller
 {
@@ -37,7 +39,9 @@ class SubmissionController extends Controller
                 ->with(['processTestGroups' => fn ($q) => $q->orderBy('id')])
                 ->distinct()
                 ->get()
-                ->filter(fn ($p) => $p->processTestGroups->isNotEmpty())
+                ->filter(fn ($p) => $p->processTestGroups->isNotEmpty()
+                    && ProcessProjectPaths::processHasUsableBaseProject($p)
+                    && $p->studentCanSubmit((int) $user->id))
                 ->values();
         }
 
@@ -80,6 +84,20 @@ class SubmissionController extends Controller
             ]);
         }
 
+        if (! ProcessProjectPaths::processHasUsableBaseProject($process)) {
+            return back()->withErrors([
+                'process_test_group_id' => __('Este processo ainda não tem projeto disponível para correção. Tente novamente assim que o docente o disponibilizar.'),
+            ]);
+        }
+
+        if (! $process->studentCanSubmit((int) $user->id)) {
+            $limit = $process->submissionLimit();
+
+            return back()->withErrors([
+                'process_test_group_id' => __('Atingiu o limite de :n submissões para este processo.', ['n' => $limit]),
+            ]);
+        }
+
         $file = $request->file('file');
 
         $submission = Submission::create([
@@ -91,8 +109,9 @@ class SubmissionController extends Controller
             'submission_date' => now(),
         ]);
 
-        $path = $file->storeAs('autograding/submission-'.$submission->id, 'submission.zip');
-        $submission->update(['zip_file_path' => $path]);
+        $artifactsDir = ProcessProjectPaths::ensureSubmissionArtifactsDir($submission);
+        $file->move($artifactsDir, 'submission.zip');
+        $submission->update(['zip_file_path' => ProcessProjectPaths::submissionZipRelative($submission)]);
 
         $runSync = config('autograding.run_sync', false)
             || config('queue.default') === 'sync';
@@ -142,8 +161,12 @@ class SubmissionController extends Controller
                     'result' => $viewData['result'],
                     'finalGradePoints' => $viewData['finalGradePoints'],
                     'maxGradePoints' => $viewData['maxGradePoints'],
+                    'displayFinalGrade' => $viewData['displayFinalGrade'],
+                    'displayMaxGrade' => $viewData['displayMaxGrade'],
+                    'displayGradeUnit' => $viewData['displayGradeUnit'],
+                    'isEvaluation' => $viewData['isEvaluation'],
                     'canView' => true,
-                    'showMax' => false,
+                    'showMax' => $viewData['isEvaluation'] && $viewData['evaluationMaxGrade'] !== null,
                 ])->render(),
                 'details_html' => view('submissions.index.partials.details-cell', $viewData)->render(),
             ];

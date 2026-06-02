@@ -42,6 +42,8 @@ class SubmissionGradedMail extends Mailable
 
     public function content(): Content
     {
+        $row = \App\Support\SubmissionRowPresenter::forSubmission($this->submission);
+
         return new Content(
             markdown: 'mail.submission-graded',
             with: [
@@ -49,6 +51,11 @@ class SubmissionGradedMail extends Mailable
                 'recipientRole' => $this->recipientRole,
                 'result' => $this->submission->submissionResult,
                 'showUrl' => route('submissions.show', $this->submission),
+                'isEvaluation' => $row['isEvaluation'],
+                'displayFinalGrade' => $row['displayFinalGrade'],
+                'displayMaxGrade' => $row['displayMaxGrade'],
+                'displayGradeUnit' => $row['displayGradeUnit'],
+                'evaluationMaxGrade' => $row['evaluationMaxGrade'],
             ],
         );
     }

@@ -5,7 +5,7 @@
 
     <div class="py-8">
         <div class="max-w-3xl mx-auto sm:px-6 lg:px-8">
-            <form method="post" action="{{ route('processes.update', $process) }}" class="space-y-6 bg-white p-6 shadow sm:rounded-lg border border-gray-200">
+            <form method="post" action="{{ route('processes.update', $process) }}" enctype="multipart/form-data" class="space-y-6 bg-white p-6 shadow sm:rounded-lg border border-gray-200">
                 @csrf
                 @method('PUT')
                 @include('processes._form', ['process' => $process])

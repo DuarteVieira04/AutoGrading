@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Submission extends Model
 {
@@ -14,6 +15,7 @@ class Submission extends Model
         'process_test_group_id',
         'student_id',
         'zip_file_path',
+        'work_dir_path',
         'status',
         'submission_date',
     ];
@@ -40,5 +42,17 @@ class Submission extends Model
     public function submissionResult()
     {
         return $this->hasOne(SubmissionResult::class, 'submissions_id');
+    }
+
+    public function testExecutions()
+    {
+        return $this->hasManyThrough(
+            TestExecution::class,
+            SubmissionResult::class,
+            'submissions_id',
+            'submission_result_id',
+            'id',
+            'id'
+        );
     }
 }

@@ -34,11 +34,16 @@ class AutoGrading:
         storage_work_dir: Optional[str] = None,
         archive_submitted_zip_path: Optional[str] = None,
         process_config_path: Optional[str] = None,
+        working_dir: Optional[str] = None,
+        skip_setup: bool = False,
     ):
         self.zip_file = Path(zip_file)
         self.student_name = student_name
         self.submission_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.working_project = None
+        self.working_project: Optional[Path] = (
+            Path(working_dir).expanduser().resolve() if working_dir else None
+        )
+        self.skip_setup = bool(skip_setup) or self.working_project is not None
         self.results = {}
         self.result_json_path = Path(result_json_path) if result_json_path else None
         self.storage_work_dir = (
@@ -150,29 +155,85 @@ class AutoGrading:
                 out.append(rel.replace("\\", "/"))
         return out
 
+    @staticmethod
+    def _parse_active(value) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return int(value) != 0
+        if isinstance(value, str):
+            return value.strip().lower() not in ("0", "false", "no", "off")
+        return True
+
+    def _read_autograding_json(self, rel_path: str) -> dict:
+        if not self.working_project:
+            return {}
+        rel = str(rel_path).strip().strip("/\\")
+        if not rel:
+            return {}
+        cfg_path = (self.working_project / rel / "autograding.json").resolve()
+        if not cfg_path.is_file():
+            return {}
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _is_suite_active(self, rel_path: str) -> bool:
+        if self.storage_work_dir and not self._path_exists_in_working(rel_path):
+            return False
+        data = self._read_autograding_json(rel_path)
+        if not data:
+            return True
+        if "active" not in data:
+            return True
+        return self._parse_active(data["active"])
+
+    def _path_exists_in_working(self, rel_path: str) -> bool:
+        if not self.working_project:
+            return False
+        rel = str(rel_path).strip().strip("/\\")
+        if not rel:
+            return False
+        return (self.working_project / rel).is_dir()
+
+    def _resolve_run_test_paths(self) -> List[str]:
+        """Pastas de testes a executar — só as que existem no projeto em working/."""
+        cfg = self.process_config if isinstance(self.process_config, dict) else {}
+        all_paths = self._normalize_path_list(cfg.get("all_test_paths"))
+        configured = all_paths if all_paths else self._normalize_path_list(cfg.get("test_paths"))
+        discovered = self._discover_test_paths()
+        platform_mode = self.storage_work_dir is not None
+
+        if platform_mode:
+            merged: List[str] = []
+            for p in discovered + configured:
+                if p not in merged and self._path_exists_in_working(p) and self._is_suite_active(p):
+                    merged.append(p)
+            return merged
+
+        merged = []
+        for p in configured + discovered:
+            if p not in merged and self._is_suite_active(p):
+                merged.append(p)
+        return merged
+
     def _discover_test_paths(self) -> List[str]:
-        """Pastas em tests/ com autograding.json (tests, tests1, tests2, …)."""
+        """Pastas em tests/ com autograding.json ativo (tests, tests1, tests2, …)."""
         if not self.working_project:
             return []
         tests_root = self.working_project / "tests"
         found: List[str] = []
         if tests_root.is_dir():
             for child in sorted(tests_root.iterdir()):
-                if child.is_dir() and (child / "autograding.json").is_file():
-                    found.append(f"tests/{child.name}")
+                if not child.is_dir() or not (child / "autograding.json").is_file():
+                    continue
+                rel = f"tests/{child.name}"
+                if self._is_suite_active(rel):
+                    found.append(rel)
         return found
-
-    def _resolve_run_test_paths(self) -> List[str]:
-        """União de all_test_paths, test_paths e pastas descobertas no projeto."""
-        cfg = self.process_config if isinstance(self.process_config, dict) else {}
-        all_paths = self._normalize_path_list(cfg.get("all_test_paths"))
-        configured = all_paths if all_paths else self._normalize_path_list(cfg.get("test_paths"))
-        discovered = self._discover_test_paths()
-        merged: List[str] = []
-        for p in configured + discovered:
-            if p not in merged:
-                merged.append(p)
-        return merged
 
     def _relative_project_path(self, abs_path: str) -> str:
         if not abs_path or not self.working_project:
@@ -426,8 +487,9 @@ class AutoGrading:
                 full = (self.working_project / rel).resolve()
                 if not full.exists():
                     self._log(
-                        f"WARNING: pasta de testes inexistente no projeto: {full}"
+                        f"WARNING: pasta de testes inexistente no projeto (ignorada): {full}"
                     )
+                    continue
                 path_args.append(str(full))
 
             if platform_mode and not path_args:
@@ -806,20 +868,31 @@ class AutoGrading:
         self._log("STARTING AUTOGRADING")
         self._log("=" * 60)
 
-        if not self._validate_zip() or not self._validate_base_project():
+        if not self._validate_zip():
             return False
 
         self._archive_submitted_zip()
 
-        extract_path = self._extract_zip()
-        if not extract_path:
-            return False
-
-        if not self._copy_base_project():
-            return False
-
-        if not self._replace_components():
-            return False
+        extract_path: Optional[Path] = None
+        if self.skip_setup:
+            if not self.working_project or not self.working_project.is_dir():
+                self._log(
+                    f"ERROR: skip-setup ativo mas --working-dir inválido: {self.working_project}"
+                )
+                return False
+            self._log(
+                f"OK: usando working-dir externo (skip-setup): {self.working_project}"
+            )
+        else:
+            if not self._validate_base_project():
+                return False
+            extract_path = self._extract_zip()
+            if not extract_path:
+                return False
+            if not self._copy_base_project():
+                return False
+            if not self._replace_components():
+                return False
 
         self._merge_suite_autograding_json()
 
@@ -837,7 +910,8 @@ class AutoGrading:
 
         self._save_results(results)
 
-        self._cleanup(extract_path)
+        if extract_path is not None:
+            self._cleanup(extract_path)
 
         self._log("OK: AUTOGRADING COMPLETED SUCCESSFULLY")
         return True
@@ -921,6 +995,18 @@ def main():
         default=None,
         help="JSON com test_paths, visibility e pesos (gravado pelo Laravel em cada submissão)",
     )
+    parser.add_argument(
+        "--working-dir",
+        dest="working_dir",
+        default=None,
+        help="Pasta absoluta do Laravel já preparada (com vendor/, node_modules/, ...) para apenas correr o PHPUnit",
+    )
+    parser.add_argument(
+        "--skip-setup",
+        dest="skip_setup",
+        action="store_true",
+        help="Salta extract/copy_base/replace_components — usa o working-dir como está",
+    )
     args = parser.parse_args()
 
     exe = AutoGrading(
@@ -931,6 +1017,8 @@ def main():
         storage_work_dir=args.storage_work_dir,
         archive_submitted_zip_path=args.archive_submitted_zip,
         process_config_path=args.process_config,
+        working_dir=args.working_dir,
+        skip_setup=args.skip_setup,
     )
     success = exe.run()
 

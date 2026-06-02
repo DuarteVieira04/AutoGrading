@@ -1,5 +1,6 @@
 {
     "weight": 30,
     "visibility": "student",
-    "purpose": "summative"
+    "purpose": "summative",
+    "active": true
 }

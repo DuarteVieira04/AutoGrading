@@ -45,7 +45,6 @@ return new class extends Migration
 
         if (Schema::hasTable('process_test_groups') && Schema::hasColumn('process_test_groups', 'sort_order')) {
             Schema::table('process_test_groups', function (Blueprint $table) {
-                $table->dropForeign(['process_id']);
                 $table->dropIndex(['process_id', 'sort_order']);
             });
         }

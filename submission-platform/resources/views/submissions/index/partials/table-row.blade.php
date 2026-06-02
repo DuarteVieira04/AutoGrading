@@ -14,8 +14,12 @@
             'result' => $result,
             'finalGradePoints' => $finalGradePoints,
             'maxGradePoints' => $maxGradePoints,
+            'displayFinalGrade' => $displayFinalGrade ?? null,
+            'displayMaxGrade' => $displayMaxGrade ?? null,
+            'displayGradeUnit' => $displayGradeUnit ?? null,
+            'isEvaluation' => $isEvaluation ?? null,
             'canView' => true,
-            'showMax' => false,
+            'showMax' => ($isEvaluation ?? false) && ($evaluationMaxGrade ?? null) !== null,
         ])
     </td>
     <td class="px-4 py-2 text-gray-800 align-top max-w-md" data-cell="details">
