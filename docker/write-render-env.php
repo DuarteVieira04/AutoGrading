@@ -9,15 +9,27 @@ $appDir = getenv('LARAVEL_APP_DIR') ?: '/app/submission-platform';
 $envFile = rtrim($appDir, '/').'/.env';
 
 $databaseUrl = (string) (getenv('DATABASE_URL') ?: '');
-$dbConnection = (string) (getenv('DB_CONNECTION') ?: '');
+$dbConnection = normalizeDbConnection((string) (getenv('DB_CONNECTION') ?: ''), $databaseUrl);
 
-// Render PostgreSQL: URL manda; evita DB_CONNECTION=mysql por engano no painel.
-if ($databaseUrl !== '' && preg_match('#^postgres(ql)?://#i', $databaseUrl)) {
-    $dbConnection = 'pgsql';
-} elseif ($dbConnection === '' && $databaseUrl !== '') {
-    $dbConnection = preg_match('#^mysql://#i', $databaseUrl) ? 'mysql' : 'pgsql';
-} elseif ($dbConnection === '') {
-    $dbConnection = 'pgsql';
+function normalizeDbConnection(string $connection, string $databaseUrl): string
+{
+    $allowed = ['mysql', 'pgsql', 'sqlite', 'sqlsrv'];
+    if (in_array($connection, $allowed, true)) {
+        return $connection;
+    }
+
+    if ($databaseUrl !== '' && preg_match('#^postgres(ql)?://#i', $databaseUrl)) {
+        return 'pgsql';
+    }
+    if ($databaseUrl !== '' && preg_match('#^mysql://#i', $databaseUrl)) {
+        return 'mysql';
+    }
+
+    if ($connection !== '' && $connection !== 'autograding-db') {
+        fwrite(STDERR, "AVISO: DB_CONNECTION=\"{$connection}\" ignorado (use pgsql, não o nome do serviço Render).\n");
+    }
+
+    return 'pgsql';
 }
 
 $vars = [

@@ -1,5 +1,7 @@
 <?php
 
+$resolveDefaultConnection = require __DIR__.'/db_connection.php';
+
 return [
 
     /*
@@ -85,9 +87,7 @@ return [
     */
 
     'batching' => [
-        'database' => env('DB_CONNECTION') ?: (
-            preg_match('#^postgres(ql)?://#i', (string) env('DATABASE_URL', '')) ? 'pgsql' : 'mysql'
-        ),
+        'database' => $resolveDefaultConnection(),
         'table' => 'job_batches',
     ],
 
@@ -104,9 +104,7 @@ return [
 
     'failed' => [
         'driver' => env('QUEUE_FAILED_DRIVER', 'database-uuids'),
-        'database' => env('DB_CONNECTION') ?: (
-            preg_match('#^postgres(ql)?://#i', (string) env('DATABASE_URL', '')) ? 'pgsql' : 'mysql'
-        ),
+        'database' => $resolveDefaultConnection(),
         'table' => 'failed_jobs',
     ],
 

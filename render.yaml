@@ -22,6 +22,7 @@ services:
         sync: false
       - key: APP_KEY
         sync: false
+      # Driver Laravel: pgsql (NÃO uses o nome do serviço "autograding-db" aqui)
       - key: DB_CONNECTION
         value: pgsql
       - key: DATABASE_URL

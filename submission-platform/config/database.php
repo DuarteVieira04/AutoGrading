@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Str;
 
+$resolveDefaultConnection = require __DIR__.'/db_connection.php';
+
 return [
 
     /*
@@ -15,9 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION') ?: (
-        preg_match('#^postgres(ql)?://#i', (string) env('DATABASE_URL', '')) ? 'pgsql' : 'mysql'
-    ),
+    'default' => $resolveDefaultConnection(),
 
     /*
     |--------------------------------------------------------------------------
