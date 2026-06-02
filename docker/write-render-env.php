@@ -9,14 +9,14 @@ $appDir = getenv('LARAVEL_APP_DIR') ?: '/app/submission-platform';
 $envFile = rtrim($appDir, '/').'/.env';
 
 [$databaseUrl, $dbExtras] = resolveDatabaseConfig();
-$dbConnection = normalizeDbConnection((string) (getenv('DB_CONNECTION') ?: ''), $databaseUrl);
+$dbConnection = normalizeDbConnection((string) sanitizeEnv(getenv('DB_CONNECTION') ?: ''), $databaseUrl);
 
 $vars = array_merge([
-    'APP_NAME' => getenv('APP_NAME') ?: 'AutoGrading',
-    'APP_ENV' => getenv('APP_ENV') ?: 'production',
-    'APP_KEY' => getenv('APP_KEY') ?: '',
-    'APP_DEBUG' => getenv('APP_DEBUG') ?: 'false',
-    'APP_URL' => getenv('APP_URL') ?: 'http://localhost',
+    'APP_NAME' => sanitizeEnv(getenv('APP_NAME') ?: 'AutoGrading'),
+    'APP_ENV' => sanitizeEnv(getenv('APP_ENV') ?: 'production'),
+    'APP_KEY' => sanitizeEnv(getenv('APP_KEY') ?: ''),
+    'APP_DEBUG' => sanitizeEnv(getenv('APP_DEBUG') ?: 'false'),
+    'APP_URL' => sanitizeEnv(getenv('APP_URL') ?: 'http://localhost'),
     'LOG_CHANNEL' => getenv('LOG_CHANNEL') ?: 'stderr',
     'DB_CONNECTION' => $dbConnection,
     'DATABASE_URL' => $databaseUrl,
@@ -33,6 +33,11 @@ $vars = array_merge([
     'AUTOGRADING_TIMEOUT' => getenv('AUTOGRADING_TIMEOUT') ?: '1900',
 ], $dbExtras);
 
+// Com DATABASE_URL, o Laravel não precisa de DB_HOST/DB_* (evita host partido em duas linhas no painel).
+if ($databaseUrl !== '') {
+    unset($vars['DB_HOST'], $vars['DB_PORT'], $vars['DB_DATABASE'], $vars['DB_USERNAME'], $vars['DB_PASSWORD']);
+}
+
 $lines = [];
 foreach ($vars as $key => $value) {
     if ($key === 'APP_KEY' && $value === '') {
@@ -45,13 +50,21 @@ foreach ($vars as $key => $value) {
     $lines[] = $key.'='.escapeEnvValue((string) $value);
 }
 
-if ($dbConnection === 'pgsql' && $databaseUrl === '' && ! isset($dbExtras['DB_HOST'])) {
+if ($dbConnection === 'pgsql' && $databaseUrl === '') {
     printDatabaseHelp();
     exit(1);
 }
 
+$parsedHost = $databaseUrl !== '' ? parse_url($databaseUrl, PHP_URL_HOST) : false;
+if ($databaseUrl !== '' && (! is_string($parsedHost) || $parsedHost === '' || preg_match('/\s/', $parsedHost))) {
+    fwrite(STDERR, "ERRO: DATABASE_URL com hostname inválido. No Render, apaga DATABASE_URL e volta a colar a Internal Database URL numa única linha.\n");
+    exit(1);
+}
+
 file_put_contents($envFile, implode("\n", $lines)."\n");
-fwrite(STDOUT, "OK: .env gerado (DB_CONNECTION={$dbConnection})\n");
+
+$hostForLog = parse_url($databaseUrl, PHP_URL_HOST) ?: '(sem host)';
+fwrite(STDOUT, "OK: .env gerado (DB_CONNECTION={$dbConnection}, host={$hostForLog})\n");
 
 /**
  * @return array{0: string, 1: array<string, string>}
@@ -67,17 +80,18 @@ function resolveDatabaseConfig(): array
         'POSTGRESQL_URL',
         'RENDER_DATABASE_URL',
     ] as $key) {
-        $url = trim((string) (getenv($key) ?: ''));
+        $url = sanitizeDatabaseUrl((string) (getenv($key) ?: ''));
         if ($url !== '' && looksLikeDatabaseUrl($url)) {
-            return [$url, extrasFromUrl($url)];
+            return [$url, []];
         }
     }
 
-    $host = firstEnv(['DB_HOST', 'PGHOST', 'POSTGRES_HOST']);
-    $port = firstEnv(['DB_PORT', 'PGPORT', 'POSTGRES_PORT']) ?: '5432';
-    $database = firstEnv(['DB_DATABASE', 'PGDATABASE', 'POSTGRES_DB', 'POSTGRES_DATABASE']);
-    $username = firstEnv(['DB_USERNAME', 'PGUSER', 'POSTGRES_USER']);
+    $host = sanitizeHost(firstEnv(['DB_HOST', 'PGHOST', 'POSTGRES_HOST']));
+    $port = sanitizeEnv(firstEnv(['DB_PORT', 'PGPORT', 'POSTGRES_PORT']) ?: '5432');
+    $database = sanitizeEnv(firstEnv(['DB_DATABASE', 'PGDATABASE', 'POSTGRES_DB', 'POSTGRES_DATABASE']));
+    $username = sanitizeEnv(firstEnv(['DB_USERNAME', 'PGUSER', 'POSTGRES_USER']));
     $password = firstEnv(['DB_PASSWORD', 'PGPASSWORD', 'POSTGRES_PASSWORD']);
+    $password = str_replace(["\r", "\n", "\t"], '', $password);
 
     if ($host !== '' && $database !== '' && $username !== '') {
         $url = sprintf(
@@ -89,59 +103,37 @@ function resolveDatabaseConfig(): array
             $database
         );
 
-        return [$url, [
-            'DB_HOST' => $host,
-            'DB_PORT' => $port,
-            'DB_DATABASE' => $database,
-            'DB_USERNAME' => $username,
-            'DB_PASSWORD' => $password,
-        ]];
+        return [sanitizeDatabaseUrl($url), []];
     }
 
     return ['', []];
 }
 
-/**
- * @return array<string, string>
- */
-function extrasFromUrl(string $url): array
-{
-    $parts = parse_url($url);
-    if ($parts === false) {
-        return [];
-    }
-
-    $extras = [];
-    if (! empty($parts['host'])) {
-        $extras['DB_HOST'] = (string) $parts['host'];
-    }
-    if (! empty($parts['port'])) {
-        $extras['DB_PORT'] = (string) $parts['port'];
-    }
-    if (! empty($parts['user'])) {
-        $extras['DB_USERNAME'] = rawurldecode((string) $parts['user']);
-    }
-    if (array_key_exists('pass', $parts)) {
-        $extras['DB_PASSWORD'] = rawurldecode((string) $parts['pass']);
-    }
-    $path = trim((string) ($parts['path'] ?? ''), '/');
-    if ($path !== '') {
-        $extras['DB_DATABASE'] = $path;
-    }
-
-    return $extras;
-}
-
 function firstEnv(array $keys): string
 {
     foreach ($keys as $key) {
-        $v = trim((string) (getenv($key) ?: ''));
+        $v = sanitizeEnv((string) (getenv($key) ?: ''));
         if ($v !== '') {
             return $v;
         }
     }
 
     return '';
+}
+
+function sanitizeEnv(string $value): string
+{
+    return trim(str_replace(["\r", "\n", "\t"], '', $value));
+}
+
+function sanitizeDatabaseUrl(string $url): string
+{
+    return trim(str_replace(["\r", "\n", "\t"], '', $url));
+}
+
+function sanitizeHost(string $host): string
+{
+    return trim(str_replace(["\r", "\n", "\t", ' '], '', $host));
 }
 
 function looksLikeDatabaseUrl(string $url): bool
