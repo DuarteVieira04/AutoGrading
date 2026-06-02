@@ -72,6 +72,7 @@ fwrite(STDOUT, "OK: .env gerado (DB_CONNECTION={$dbConnection}, host={$hostForLo
 function resolveDatabaseConfig(): array
 {
     foreach ([
+        'DATABASE_EXTERNAL_URL',
         'DATABASE_URL',
         'DATABASE_URL_INTERNAL',
         'DATABASE_INTERNAL_URL',
@@ -82,7 +83,7 @@ function resolveDatabaseConfig(): array
     ] as $key) {
         $url = sanitizeDatabaseUrl((string) (getenv($key) ?: ''));
         if ($url !== '' && looksLikeDatabaseUrl($url)) {
-            return [$url, []];
+            return [normalizeRenderPostgresUrl($url), []];
         }
     }
 
@@ -103,10 +104,67 @@ function resolveDatabaseConfig(): array
             $database
         );
 
-        return [sanitizeDatabaseUrl($url), []];
+        return [normalizeRenderPostgresUrl(sanitizeDatabaseUrl($url)), []];
     }
 
     return ['', []];
+}
+
+/**
+ * Host interno Render (dpg-xxx-a) → FQDN resolvível; evita "Name or service not known".
+ */
+function normalizeRenderPostgresUrl(string $url): string
+{
+    $parts = parse_url($url);
+    if ($parts === false || empty($parts['host'])) {
+        return $url;
+    }
+
+    $host = sanitizeHost((string) $parts['host']);
+    if (str_contains($host, '.')) {
+        return rebuildPostgresUrl($parts, $host);
+    }
+
+    if (! preg_match('/^dpg-[a-z0-9]+-a$/i', $host)) {
+        return rebuildPostgresUrl($parts, $host);
+    }
+
+    $region = sanitizeEnv(
+        getenv('RENDER_POSTGRES_REGION')
+        ?: getenv('RENDER_REGION')
+        ?: 'frankfurt'
+    );
+    $fqdn = $host.'.'.$region.'-postgres.render.com';
+    fwrite(STDERR, "INFO: hostname PostgreSQL expandido para {$fqdn}\n");
+
+    return rebuildPostgresUrl($parts, $fqdn);
+}
+
+/**
+ * @param  array<string, mixed>  $parts
+ */
+function rebuildPostgresUrl(array $parts, string $host): string
+{
+    $user = isset($parts['user']) ? rawurldecode((string) $parts['user']) : '';
+    $pass = isset($parts['pass']) ? rawurldecode((string) $parts['pass']) : '';
+    $port = isset($parts['port']) ? (int) $parts['port'] : 5432;
+    $db = trim((string) ($parts['path'] ?? ''), '/');
+
+    $auth = '';
+    if ($user !== '') {
+        $auth = rawurlencode($user);
+        if ($pass !== '') {
+            $auth .= ':'.rawurlencode($pass);
+        }
+        $auth .= '@';
+    }
+
+    $url = "postgresql://{$auth}{$host}:{$port}";
+    if ($db !== '') {
+        $url .= '/'.$db;
+    }
+
+    return $url;
 }
 
 function firstEnv(array $keys): string

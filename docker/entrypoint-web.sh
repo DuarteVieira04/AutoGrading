@@ -19,6 +19,10 @@ done
 
 php /app/docker/write-render-env.php
 
+# Laravel não sobrescreve env do Render com .env — exportar valores saneados do ficheiro gerado.
+unset DB_HOST DB_PORT DB_USERNAME DB_PASSWORD DB_DATABASE DB_URL 2>/dev/null || true
+eval "$(php /app/docker/export-db-shell-env.php)"
+
 echo "=== DB (arranque) ==="
 grep -E '^(DB_CONNECTION|DATABASE_URL)=' .env | sed 's/\(DATABASE_URL=postgresql:\/\/[^:]*:\)[^@]*/\1***/' || true
 
