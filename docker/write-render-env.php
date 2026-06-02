@@ -1,38 +1,17 @@
 <?php
 
 /**
- * Gera submission-platform/.env a partir das variáveis do Render (evita mysql/forge por defeito).
+ * Gera submission-platform/.env a partir das variáveis do Render.
  */
 declare(strict_types=1);
 
 $appDir = getenv('LARAVEL_APP_DIR') ?: '/app/submission-platform';
 $envFile = rtrim($appDir, '/').'/.env';
 
-$databaseUrl = (string) (getenv('DATABASE_URL') ?: '');
+[$databaseUrl, $dbExtras] = resolveDatabaseConfig();
 $dbConnection = normalizeDbConnection((string) (getenv('DB_CONNECTION') ?: ''), $databaseUrl);
 
-function normalizeDbConnection(string $connection, string $databaseUrl): string
-{
-    $allowed = ['mysql', 'pgsql', 'sqlite', 'sqlsrv'];
-    if (in_array($connection, $allowed, true)) {
-        return $connection;
-    }
-
-    if ($databaseUrl !== '' && preg_match('#^postgres(ql)?://#i', $databaseUrl)) {
-        return 'pgsql';
-    }
-    if ($databaseUrl !== '' && preg_match('#^mysql://#i', $databaseUrl)) {
-        return 'mysql';
-    }
-
-    if ($connection !== '' && $connection !== 'autograding-db') {
-        fwrite(STDERR, "AVISO: DB_CONNECTION=\"{$connection}\" ignorado (use pgsql, não o nome do serviço Render).\n");
-    }
-
-    return 'pgsql';
-}
-
-$vars = [
+$vars = array_merge([
     'APP_NAME' => getenv('APP_NAME') ?: 'AutoGrading',
     'APP_ENV' => getenv('APP_ENV') ?: 'production',
     'APP_KEY' => getenv('APP_KEY') ?: '',
@@ -52,7 +31,7 @@ $vars = [
     'AUTOGRADING_ENABLED' => getenv('AUTOGRADING_ENABLED') ?: 'true',
     'AUTOGRADING_RUN_SYNC' => getenv('AUTOGRADING_RUN_SYNC') ?: 'false',
     'AUTOGRADING_TIMEOUT' => getenv('AUTOGRADING_TIMEOUT') ?: '1900',
-];
+], $dbExtras);
 
 $lines = [];
 foreach ($vars as $key => $value) {
@@ -60,15 +39,148 @@ foreach ($vars as $key => $value) {
         fwrite(STDERR, "ERRO: APP_KEY em falta no Render.\n");
         exit(1);
     }
-    if ($key === 'DATABASE_URL' && $value === '' && $dbConnection === 'pgsql') {
-        fwrite(STDERR, "ERRO: DATABASE_URL em falta. Liga a BD PostgreSQL ao serviço no Render.\n");
-        exit(1);
+    if ($value === '') {
+        continue;
     }
     $lines[] = $key.'='.escapeEnvValue((string) $value);
 }
 
+if ($dbConnection === 'pgsql' && $databaseUrl === '' && ! isset($dbExtras['DB_HOST'])) {
+    printDatabaseHelp();
+    exit(1);
+}
+
 file_put_contents($envFile, implode("\n", $lines)."\n");
 fwrite(STDOUT, "OK: .env gerado (DB_CONNECTION={$dbConnection})\n");
+
+/**
+ * @return array{0: string, 1: array<string, string>}
+ */
+function resolveDatabaseConfig(): array
+{
+    foreach ([
+        'DATABASE_URL',
+        'DATABASE_URL_INTERNAL',
+        'DATABASE_INTERNAL_URL',
+        'DB_URL',
+        'POSTGRES_URL',
+        'POSTGRESQL_URL',
+        'RENDER_DATABASE_URL',
+    ] as $key) {
+        $url = trim((string) (getenv($key) ?: ''));
+        if ($url !== '' && looksLikeDatabaseUrl($url)) {
+            return [$url, extrasFromUrl($url)];
+        }
+    }
+
+    $host = firstEnv(['DB_HOST', 'PGHOST', 'POSTGRES_HOST']);
+    $port = firstEnv(['DB_PORT', 'PGPORT', 'POSTGRES_PORT']) ?: '5432';
+    $database = firstEnv(['DB_DATABASE', 'PGDATABASE', 'POSTGRES_DB', 'POSTGRES_DATABASE']);
+    $username = firstEnv(['DB_USERNAME', 'PGUSER', 'POSTGRES_USER']);
+    $password = firstEnv(['DB_PASSWORD', 'PGPASSWORD', 'POSTGRES_PASSWORD']);
+
+    if ($host !== '' && $database !== '' && $username !== '') {
+        $url = sprintf(
+            'postgresql://%s:%s@%s:%s/%s',
+            rawurlencode($username),
+            rawurlencode($password),
+            $host,
+            $port,
+            $database
+        );
+
+        return [$url, [
+            'DB_HOST' => $host,
+            'DB_PORT' => $port,
+            'DB_DATABASE' => $database,
+            'DB_USERNAME' => $username,
+            'DB_PASSWORD' => $password,
+        ]];
+    }
+
+    return ['', []];
+}
+
+/**
+ * @return array<string, string>
+ */
+function extrasFromUrl(string $url): array
+{
+    $parts = parse_url($url);
+    if ($parts === false) {
+        return [];
+    }
+
+    $extras = [];
+    if (! empty($parts['host'])) {
+        $extras['DB_HOST'] = (string) $parts['host'];
+    }
+    if (! empty($parts['port'])) {
+        $extras['DB_PORT'] = (string) $parts['port'];
+    }
+    if (! empty($parts['user'])) {
+        $extras['DB_USERNAME'] = rawurldecode((string) $parts['user']);
+    }
+    if (array_key_exists('pass', $parts)) {
+        $extras['DB_PASSWORD'] = rawurldecode((string) $parts['pass']);
+    }
+    $path = trim((string) ($parts['path'] ?? ''), '/');
+    if ($path !== '') {
+        $extras['DB_DATABASE'] = $path;
+    }
+
+    return $extras;
+}
+
+function firstEnv(array $keys): string
+{
+    foreach ($keys as $key) {
+        $v = trim((string) (getenv($key) ?: ''));
+        if ($v !== '') {
+            return $v;
+        }
+    }
+
+    return '';
+}
+
+function looksLikeDatabaseUrl(string $url): bool
+{
+    return (bool) preg_match('#^(postgres(ql)?|mysql)://#i', $url);
+}
+
+function normalizeDbConnection(string $connection, string $databaseUrl): string
+{
+    $allowed = ['mysql', 'pgsql', 'sqlite', 'sqlsrv'];
+    if (in_array($connection, $allowed, true)) {
+        return $connection;
+    }
+
+    if ($databaseUrl !== '' && preg_match('#^postgres(ql)?://#i', $databaseUrl)) {
+        return 'pgsql';
+    }
+    if ($databaseUrl !== '' && preg_match('#^mysql://#i', $databaseUrl)) {
+        return 'mysql';
+    }
+
+    if ($connection !== '' && $connection !== 'autograding-db') {
+        fwrite(STDERR, "AVISO: DB_CONNECTION=\"{$connection}\" ignorado (use pgsql).\n");
+    }
+
+    return 'pgsql';
+}
+
+function printDatabaseHelp(): void
+{
+    fwrite(STDERR, "\nERRO: ligação PostgreSQL em falta (DATABASE_URL).\n\n");
+    fwrite(STDERR, "No Render:\n");
+    fwrite(STDERR, "  1. Cria a base PostgreSQL (ex. autograding-db) na mesma região que o web.\n");
+    fwrite(STDERR, "  2. No serviço autograding-web → Environment → Add variable.\n");
+    fwrite(STDERR, "  3. Escolhe \"Add from database\" → autograding-db → Internal Database URL.\n");
+    fwrite(STDERR, "  4. Nome da variável: DATABASE_URL\n");
+    fwrite(STDERR, "  5. Guarda e faz Redeploy.\n\n");
+    fwrite(STDERR, "Ou aplica o render.yaml (Blueprint) que liga a BD automaticamente.\n\n");
+}
 
 function escapeEnvValue(string $value): string
 {

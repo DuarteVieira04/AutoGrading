@@ -8,6 +8,15 @@ source /app/docker/render-env.sh
 export AUTOGRADING_PROJECT_ROOT="${AUTOGRADING_PROJECT_ROOT:-/app}"
 export RUN_QUEUE_WORKER="${RUN_QUEUE_WORKER:-true}"
 
+echo "=== Variáveis de BD no contentor ==="
+for v in DATABASE_URL DB_URL DB_HOST DB_USERNAME DB_DATABASE DB_CONNECTION; do
+  if [[ -n "${!v:-}" ]]; then
+    echo "  ${v}=definida"
+  else
+    echo "  ${v}=vazia"
+  fi
+done
+
 php /app/docker/write-render-env.php
 
 echo "=== DB (arranque) ==="
