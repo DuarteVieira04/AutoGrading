@@ -20,6 +20,7 @@ $vars = array_merge([
     'LOG_CHANNEL' => getenv('LOG_CHANNEL') ?: 'stderr',
     'DB_CONNECTION' => $dbConnection,
     'DATABASE_URL' => $databaseUrl,
+    'DB_SSLMODE' => postgresSslModeFromUrl($databaseUrl),
     'QUEUE_CONNECTION' => getenv('QUEUE_CONNECTION') ?: 'database',
     'SESSION_DRIVER' => getenv('SESSION_DRIVER') ?: 'file',
     'CACHE_DRIVER' => getenv('CACHE_DRIVER') ?: 'file',
@@ -83,7 +84,7 @@ function resolveDatabaseConfig(): array
     ] as $key) {
         $url = sanitizeDatabaseUrl((string) (getenv($key) ?: ''));
         if ($url !== '' && looksLikeDatabaseUrl($url)) {
-            return [normalizeRenderPostgresUrl($url), []];
+            return [finalizePostgresUrl($url), []];
         }
     }
 
@@ -104,40 +105,63 @@ function resolveDatabaseConfig(): array
             $database
         );
 
-        return [normalizeRenderPostgresUrl(sanitizeDatabaseUrl($url)), []];
+        return [finalizePostgresUrl(sanitizeDatabaseUrl($url)), []];
     }
 
     return ['', []];
 }
 
 /**
- * Host interno Render (dpg-xxx-a) → FQDN resolvível; evita "Name or service not known".
+ * Sanitiza URL PostgreSQL do Render (sem expandir host interno — evita SSL externo).
  */
-function normalizeRenderPostgresUrl(string $url): string
+function finalizePostgresUrl(string $url): string
 {
-    $parts = parse_url($url);
+    $parts = parse_url(sanitizeDatabaseUrl($url));
     if ($parts === false || empty($parts['host'])) {
-        return $url;
+        return sanitizeDatabaseUrl($url);
     }
 
     $host = sanitizeHost((string) $parts['host']);
-    if (str_contains($host, '.')) {
-        return rebuildPostgresUrl($parts, $host);
+    $url = rebuildPostgresUrl($parts, $host);
+
+    // Host interno Render (rede privada): sem SSL. FQDN .render.com: SSL obrigatório.
+    if (preg_match('/^dpg-[a-z0-9]+-a$/i', $host)) {
+        $sslmode = 'disable';
+        fwrite(STDERR, "INFO: PostgreSQL host interno Render ({$host}), sslmode=disable\n");
+    } elseif (str_contains($host, '.render.com')) {
+        $sslmode = 'require';
+        fwrite(STDERR, "INFO: PostgreSQL host externo Render, sslmode=require\n");
+    } else {
+        $sslmode = 'prefer';
     }
 
-    if (! preg_match('/^dpg-[a-z0-9]+-a$/i', $host)) {
-        return rebuildPostgresUrl($parts, $host);
+    return appendPostgresSslMode($url, $sslmode);
+}
+
+function appendPostgresSslMode(string $url, string $sslmode): string
+{
+    if (preg_match('/[?&]sslmode=/', $url)) {
+        return preg_replace('/([?&])sslmode=[^&]*/', '$1sslmode='.$sslmode, $url) ?? $url;
     }
 
-    $region = sanitizeEnv(
-        getenv('RENDER_POSTGRES_REGION')
-        ?: getenv('RENDER_REGION')
-        ?: 'frankfurt'
-    );
-    $fqdn = $host.'.'.$region.'-postgres.render.com';
-    fwrite(STDERR, "INFO: hostname PostgreSQL expandido para {$fqdn}\n");
+    return $url.(str_contains($url, '?') ? '&' : '?').'sslmode='.$sslmode;
+}
 
-    return rebuildPostgresUrl($parts, $fqdn);
+function postgresSslModeFromUrl(string $url): string
+{
+    if (preg_match('/[?&]sslmode=([^&]+)/', $url, $m)) {
+        return $m[1];
+    }
+
+    $host = parse_url($url, PHP_URL_HOST);
+    if (is_string($host) && preg_match('/^dpg-[a-z0-9]+-a$/i', sanitizeHost($host))) {
+        return 'disable';
+    }
+    if (is_string($host) && str_contains($host, '.render.com')) {
+        return 'require';
+    }
+
+    return 'prefer';
 }
 
 /**

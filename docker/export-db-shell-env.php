@@ -11,7 +11,7 @@ if (! is_file($envFile)) {
     exit(1);
 }
 
-$vars = ['DATABASE_URL', 'DB_CONNECTION'];
+$vars = ['DATABASE_URL', 'DB_CONNECTION', 'DB_SSLMODE'];
 $parsed = [];
 
 foreach (file($envFile, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
