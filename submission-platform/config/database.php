@@ -15,7 +15,9 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'mysql'),
+    'default' => env('DB_CONNECTION') ?: (
+        preg_match('#^postgres(ql)?://#i', (string) env('DATABASE_URL', '')) ? 'pgsql' : 'mysql'
+    ),
 
     /*
     |--------------------------------------------------------------------------

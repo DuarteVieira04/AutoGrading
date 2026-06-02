@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         opcache \
     && rm -rf /var/lib/apt/lists/*
 
+RUN sed -i 's/^;*clear_env = .*/clear_env = no/' /usr/local/etc/php-fpm.d/www.conf
+
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
@@ -57,7 +59,9 @@ ENV AUTOGRADING_PROJECT_ROOT=/app \
     AUTOGRADING_RUN_SYNC=false \
     AUTOGRADING_TIMEOUT=1900 \
     APP_ENV=production \
-    LOG_CHANNEL=stderr
+    LOG_CHANNEL=stderr \
+    DB_CONNECTION=pgsql \
+    QUEUE_CONNECTION=database
 
 EXPOSE 10000
 

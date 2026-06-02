@@ -85,7 +85,9 @@ return [
     */
 
     'batching' => [
-        'database' => env('DB_CONNECTION', 'mysql'),
+        'database' => env('DB_CONNECTION') ?: (
+            preg_match('#^postgres(ql)?://#i', (string) env('DATABASE_URL', '')) ? 'pgsql' : 'mysql'
+        ),
         'table' => 'job_batches',
     ],
 
@@ -102,7 +104,9 @@ return [
 
     'failed' => [
         'driver' => env('QUEUE_FAILED_DRIVER', 'database-uuids'),
-        'database' => env('DB_CONNECTION', 'mysql'),
+        'database' => env('DB_CONNECTION') ?: (
+            preg_match('#^postgres(ql)?://#i', (string) env('DATABASE_URL', '')) ? 'pgsql' : 'mysql'
+        ),
         'table' => 'failed_jobs',
     ],
 
